@@ -1,0 +1,1053 @@
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Search, Heart, ShoppingCart, User, ChevronUp, CheckCheck } from 'lucide-react';
+import mockProducts from '../data/mockProducts';
+import Footer from '../components/Footer';
+
+/* ─── Constants ───────────────────────────────────────── */
+
+const FEATURED = ['All', 'Bikini Set', 'Top & Bottom Set', 'Dress', 'Pareo', 'Monokini'];
+
+/* ─── Color swatch map ────────────────────────────────── */
+
+const COLOR_MAP = {
+  /* ── Solid basics ── */
+  'White':                '#FFFFFF',
+  'Black':                '#222222',
+  'Brown':                '#8B5E3C',
+  'Purple':               '#9B59B6',
+  'Blue':                 '#3498DB',
+  'Red':                  '#E74C3C',
+  'Beige':                '#F5DEB3',
+  'Cream':                '#FFFDD0',
+  'Grey':                 '#9E9E9E',
+  'Yellow':               '#FEF08A',
+  'Green':                '#4CAF50',
+  'Water Green':          '#7FFFD4',
+  'Sage Green':           '#87AE73',
+  'Gold Glow':            '#FFD700',
+  'Sunshine':             '#FFC300',
+  /* ── Extended palette ── */
+  'Anthracite':           '#2D2D2D',
+  'Batik':                '#8B6359',
+  'Beige-Orange-Black':   '#D4723A',
+  'Black Silver':         '#404040',
+  'Black White':          '#888888',
+  'Blue - White':         '#5DADE2',
+  'Blue Green':           '#1ABC9C',
+  'Blue White':           '#85C1E9',
+  'Blue White Black':     '#2C3E50',
+  'Brown - Orange Iridescent': '#CD7F32',
+  'Brown Cream':          '#C4A27B',
+  'Brown White':          '#A0785A',
+  'Cream Beige':          '#F0E6CF',
+  'Cream Light Yellow':   '#FAFAD2',
+  'Cyan-Purple':          '#9B8EC4',
+  'Dark Magenta':         '#8B008B',
+  'Ecru':                 '#FAF0E6',
+  'Grey White':           '#D3D3D3',
+  'Khaki':                '#BDB76B',
+  'Lavender':             '#B57EDC',
+  'Light Brown Beige':    '#D4B896',
+  'Light Brown White':    '#C8A882',
+  'Lilac':                '#C8A2C8',
+  'Lilac-Pink':           '#DDA0DD',
+  'Milky Brown':          '#C4956A',
+  'Natural':              '#D4C5A9',
+  'Natural DK2':          '#BCA88E',
+  'Navy':                 '#001F54',
+  'Navy Pink':            '#1D3461',
+  'Pink':                 '#FF69B4',
+  'Pink White':           '#FFB6C1',
+  'Purple White':         '#C39BD3',
+  'Raw':                  '#E8D5B0',
+  'Red - White':          '#E74C3C',
+  'Red Star':             '#C0392B',
+  'Red White':            '#E57373',
+  'Silver':               '#C0C0C0',
+  'Silver-Grey':          '#B0B7BF',
+  'Terracotta':           '#CC4E2A',
+  'Turquoise':            '#40E0D0',
+  'White Beige':          '#F5F0E8',
+  'White Black':          '#909090',
+  'White Blue':           '#D6E4F0',
+  'White Milky Brown':    '#EDE0CC',
+  'White Purple':         '#D7BDE2',
+  'White Turquoise':      '#B2DFDB',
+  'Yellow-Navy':          '#F1C40F',
+};
+
+/* Colors that are so light they need a stronger border to be visible on a white card */
+const LIGHT_COLORS = new Set([
+  'White', 'Cream', 'Ecru', 'Cream Beige', 'Cream Light Yellow', 'White Beige',
+  'White Blue', 'White Milky Brown', 'White Purple', 'White Turquoise',
+  'Grey White', 'Natural', 'Raw', 'Blue White', 'Pink White',
+]);
+
+function swatchBackground(colorName) {
+  if (colorName === 'Multicolor') return null; // gradient, handled inline
+  return COLOR_MAP[colorName] ?? '#A0A0A0';
+}
+
+/* ─── Helpers ─────────────────────────────────────────── */
+
+function formatPrice(price) {
+  return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* ─── Pre-build flat card list at module level (runs once) ─
+ *
+ * Step 1: group by model to collect color variants and collapse sizes.
+ * Step 2: flatten — one CARD per color variant, each card carries the
+ *         full siblings array so swatches can reference other cards.
+ *
+ * Each card: {
+ *   id, color, images, quantityInStock,   ← this specific variant
+ *   model, name, categoryName, price,      ← shared model info
+ *   siblings: [{ id, color }]              ← ALL variants of this model
+ * }
+ */
+const ALL_CARDS = (() => {
+  /* Step 1 — group by model */
+  const map = new Map();
+  for (const p of mockProducts) {
+    if (!map.has(p.model)) {
+      map.set(p.model, {
+        model: p.model,
+        name: p.name,
+        categoryName: p.categoryName,
+        price: p.price,
+        variants: [],
+      });
+    }
+    const group = map.get(p.model);
+    if (!group.variants.find((v) => v.color === p.color)) {
+      group.variants.push({
+        id: p.id,
+        color: p.color,
+        images: p.images,
+        quantityInStock: p.quantityInStock,
+      });
+    }
+  }
+
+  /* Step 2 — flatten */
+  const cards = [];
+  for (const group of map.values()) {
+    const siblings = group.variants.map((v) => ({ id: v.id, color: v.color }));
+    for (const v of group.variants) {
+      cards.push({
+        id: v.id,
+        color: v.color,
+        images: v.images,
+        quantityInStock: v.quantityInStock,
+        model: group.model,
+        name: group.name,
+        categoryName: group.categoryName,
+        price: group.price,
+        siblings,
+      });
+    }
+  }
+  return cards;
+})();
+
+/* sizes keyed by "model|color" → sorted size array */
+const SIZE_MAP = (() => {
+  const map = {};
+  for (const p of mockProducts) {
+    const key = `${p.model}|${p.color}`;
+    if (!map[key]) map[key] = [];
+    if (!map[key].includes(p.size)) map[key].push(p.size);
+  }
+  const ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL'];
+  for (const key of Object.keys(map)) {
+    map[key].sort((a, b) => {
+      const ai = ORDER.indexOf(a), bi = ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }
+  return map;
+})();
+
+/* ─── Navbar ──────────────────────────────────────────── */
+
+function Navbar() {
+  return (
+    <nav style={styles.navbar}>
+      <Link to="/products" style={styles.navBrand}>SCYLLA</Link>
+      <div style={styles.navIcons}>
+        <button style={styles.iconBtn} aria-label="Search">
+          <Search size={22} />
+        </button>
+        <Link to="/wishlist" style={styles.iconBtn} aria-label="Wishlist">
+          <Heart size={22} />
+        </Link>
+        <Link to="/cart" style={styles.iconBtn} aria-label="Cart">
+          <ShoppingCart size={22} />
+        </Link>
+        <Link to="/login" style={styles.iconBtn} aria-label="Account">
+          <User size={22} />
+        </Link>
+      </div>
+    </nav>
+  );
+}
+
+/* ─── Page ────────────────────────────────────────────── */
+
+export default function ProductListingPage() {
+  const navigate = useNavigate();
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const gridRef = useRef(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    function onScroll() { setShowScrollTop(window.scrollY > 300); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  function addToast() {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 2500);
+  }
+
+  const allCategories = useMemo(() => {
+    const unique = [...new Set(mockProducts.map((p) => p.categoryName))].sort();
+    return ['All', ...unique];
+  }, []);
+
+  const moreCategories = useMemo(
+    () => allCategories.filter((c) => !FEATURED.includes(c)),
+    [allCategories]
+  );
+
+  const cards = useMemo(() => {
+    if (activeCategory === 'All') return ALL_CARDS;
+    return ALL_CARDS.filter((c) => c.categoryName === activeCategory);
+  }, [activeCategory]);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMoreOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  function selectCategory(cat) {
+    setActiveCategory(cat);
+    setMoreOpen(false);
+  }
+
+  const activeInMore = moreCategories.includes(activeCategory);
+
+  return (
+    <>
+      <style>{`
+        .plp-grid { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 900px) { .plp-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 560px) { .plp-grid { grid-template-columns: 1fr; } }
+        .swatch-tooltip { display: none; }
+        .swatch-wrap:hover .swatch-tooltip { display: block; }
+        .dropdown-item-btn:hover { background-color: var(--color-blue) !important; }
+        .hero { height: 420px; }
+        @media (max-width: 640px) { .hero { height: 280px; } }
+        .shop-now-btn:hover { background-color: var(--color-yellow-hover) !important; }
+        .hero-inner { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: var(--space-10); max-width: var(--container-max); width: 100%; padding: 0 var(--container-pad); position: relative; z-index: 1; }
+        .hero-image-col { display: block; }
+        @media (max-width: 640px) { .hero-inner { grid-template-columns: 1fr; } .hero-image-col { display: none; } }
+        .scroll-top-btn:hover { opacity: 0.85 !important; }
+      `}</style>
+
+      <Navbar />
+
+      {/* ── Hero Banner ── */}
+      <div className="hero" style={styles.hero}>
+        {/* Decorative circles */}
+        <div style={{ ...styles.heroDot, width: 220, height: 220, top: -60, left: -60 }} />
+        <div style={{ ...styles.heroDot, width: 140, height: 140, bottom: -30, right: 40 }} />
+
+        {/* Wave SVG */}
+        <svg
+          viewBox="0 0 1440 320"
+          preserveAspectRatio="none"
+          style={styles.heroWave}
+          aria-hidden="true"
+        >
+          <path
+            fill="var(--color-blue)"
+            fillOpacity="0.55"
+            d="M0,160L48,149.3C96,139,192,117,288,128C384,139,480,181,576,181.3C672,181,768,139,864,122.7C960,107,1056,117,1152,138.7C1248,160,1344,192,1392,208L1440,224L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
+          />
+        </svg>
+
+        {/* Split layout */}
+        <div className="hero-inner">
+          {/* Left — text */}
+          <div style={styles.heroContent}>
+            <h1 style={styles.heroTitle}>SCYLLA</h1>
+            <p style={styles.heroTagline}>Handcrafted for the shore</p>
+            <button
+              className="shop-now-btn"
+              style={styles.shopNowBtn}
+              onClick={() => gridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              SHOP NOW
+            </button>
+          </div>
+
+          {/* Right — hero image */}
+          <div className="hero-image-col">
+            <img
+              src="https://cdn.dsmcdn.com/ty1703/prod/QC_ENRICHMENT/20250701/13/e9deed03-3b30-3d06-ae47-2b195d8a48ed/1_org_zoom.jpg"
+              alt="Scylla hero"
+              style={styles.heroImage}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.page}>
+        {/* ── Filter Bar ── */}
+        <div style={styles.filterBar}>
+          {FEATURED.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => selectCategory(cat)}
+              style={activeCategory === cat ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+            >
+              {cat}
+            </button>
+          ))}
+
+          {moreCategories.length > 0 && (
+            <div ref={dropdownRef} style={styles.moreWrap}>
+              <button
+                onClick={() => setMoreOpen((o) => !o)}
+                style={activeInMore ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+              >
+                {activeInMore ? activeCategory : 'More'} ▾
+              </button>
+              {moreOpen && (
+                <div style={styles.dropdown}>
+                  {moreCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      className="dropdown-item-btn"
+                      onClick={() => selectCategory(cat)}
+                      style={
+                        activeCategory === cat
+                          ? { ...styles.dropdownItem, ...styles.dropdownItemActive }
+                          : styles.dropdownItem
+                      }
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Product count ── */}
+        <div style={styles.countRow}>
+          <span style={styles.countText}>Showing {cards.length} products</span>
+        </div>
+
+        {/* ── Product Grid ── */}
+        <div ref={gridRef} style={styles.grid} className="plp-grid">
+          {cards.map((card) => (
+            <ProductCard key={card.id} card={card} navigate={navigate} onAddToCart={addToast} />
+          ))}
+        </div>
+      </div>
+
+      <Footer />
+
+      {/* ── Toast container ── */}
+      <ToastContainer toasts={toasts} />
+
+      {/* ── Scroll to top ── */}
+      <button
+        className="scroll-top-btn"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        aria-label="Scroll to top"
+        style={{
+          ...styles.scrollTopBtn,
+          opacity: showScrollTop ? 1 : 0,
+          pointerEvents: showScrollTop ? 'auto' : 'none',
+        }}
+      >
+        <ChevronUp size={20} />
+      </button>
+    </>
+  );
+}
+
+/* ─── Product Card ────────────────────────────────────── */
+
+function ProductCard({ card, navigate, onAddToCart }) {
+  const [hovered, setHovered] = useState(false);
+  const [selectedSize, setSelectedSize] = useState(null);
+  const [added, setAdded] = useState(false);
+  const inStock = card.quantityInStock > 0;
+
+  const sizes = SIZE_MAP[`${card.model}|${card.color}`] ?? [];
+  /* Show size drawer when hovered OR a size is already selected */
+  const drawerOpen = hovered || selectedSize !== null;
+
+  function handleMouseLeave() {
+    setHovered(false);
+    /* If nothing was selected, collapse the drawer */
+    if (selectedSize === null) {
+      /* nothing extra needed — drawerOpen recomputes */
+    }
+  }
+
+  function handleSwatchClick(e, sibling) {
+    e.stopPropagation();
+    if (sibling.id === card.id) return;
+    const el = document.getElementById(`plp-card-${sibling.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.outline = '2px solid var(--color-charcoal)';
+      setTimeout(() => { el.style.outline = 'none'; }, 1200);
+    }
+  }
+
+  function handleAddToCart(e) {
+    e.stopPropagation();
+    if (!selectedSize) return;
+    onAddToCart();
+    setAdded(true);
+    setTimeout(() => {
+      setAdded(false);
+      setSelectedSize(null);
+    }, 1500);
+  }
+
+  return (
+    <div
+      id={`plp-card-${card.id}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={handleMouseLeave}
+      style={{
+        ...styles.card,
+        transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
+        boxShadow: hovered ? 'var(--shadow-lg)' : 'var(--shadow-card)',
+      }}
+    >
+      {/* Image — clicking navigates to detail */}
+      <div
+        style={styles.imageWrap}
+        onClick={() => navigate(`/products/${card.id}`)}
+      >
+        <img
+          src={card.images[0]}
+          alt={card.name}
+          style={{
+            ...styles.image,
+            ...(!inStock ? { filter: 'grayscale(60%)', opacity: 0.65 } : {}),
+          }}
+        />
+        <span style={{ ...styles.badge, ...(inStock ? styles.badgeIn : styles.badgeOut) }}>
+          {inStock ? 'IN STOCK' : 'OUT OF STOCK'}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={styles.cardBody}>
+        {/* Name — clicking navigates */}
+        <p
+          style={{ ...styles.name, cursor: 'pointer' }}
+          onClick={() => navigate(`/products/${card.id}`)}
+        >
+          {card.name}
+        </p>
+
+        <div style={styles.meta}>
+          <span style={styles.price}>{formatPrice(card.price)}</span>
+          <span style={styles.colorLabel}>{card.color}</span>
+        </div>
+
+        {/* Color swatches */}
+        {card.siblings.length > 1 && (
+          <div style={styles.swatches}>
+            {card.siblings.map((s) => {
+              const isActive = s.id === card.id;
+              const bg = swatchBackground(s.color);
+              const isGradient = s.color === 'Multicolor';
+              const needsBorder = LIGHT_COLORS.has(s.color);
+              return (
+                <div key={s.id} className="swatch-wrap" style={styles.swatchWrap}>
+                  <button
+                    onClick={(e) => handleSwatchClick(e, s)}
+                    style={{
+                      ...styles.swatch,
+                      ...(isGradient
+                        ? { backgroundImage: 'linear-gradient(135deg,#f06,#9f6,#06f)' }
+                        : { backgroundColor: bg }),
+                      outline: needsBorder ? '1.5px solid #BBBBBB' : '1.5px solid transparent',
+                      outlineOffset: '1px',
+                      ...(isActive ? styles.swatchActive : {}),
+                    }}
+                    aria-label={s.color}
+                  />
+                  <span className="swatch-tooltip" style={styles.swatchTooltip}>
+                    {s.color}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Size + button drawer */}
+        <div style={styles.cartArea}>
+          {/* Size row — slides up on hover */}
+          {inStock && sizes.length > 0 && (
+            <div style={{
+              ...styles.sizeRow,
+              transform: drawerOpen ? 'translateY(0)' : 'translateY(110%)',
+              opacity: drawerOpen ? 1 : 0,
+              pointerEvents: drawerOpen ? 'auto' : 'none',
+            }}>
+              {sizes.map((sz) => (
+                <button
+                  key={sz}
+                  onClick={(e) => { e.stopPropagation(); setSelectedSize(sz === selectedSize ? null : sz); }}
+                  style={{
+                    ...styles.sizePill,
+                    ...(selectedSize === sz ? styles.sizePillActive : {}),
+                  }}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Cart button */}
+          {inStock ? (
+            <button
+              disabled={!selectedSize || added}
+              onClick={handleAddToCart}
+              style={{
+                ...styles.cartBtn,
+                ...(added
+                  ? styles.cartBtnAdded
+                  : !selectedSize
+                    ? styles.cartBtnNoSize
+                    : {}),
+              }}
+            >
+              {added
+                ? <><CheckCheck size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} />Added!</>
+                : !selectedSize
+                  ? 'SELECT SIZE'
+                  : 'ADD TO CART'}
+            </button>
+          ) : (
+            <button disabled style={{ ...styles.cartBtn, ...styles.cartBtnDisabled }}>
+              OUT OF STOCK
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Styles ──────────────────────────────────────────── */
+
+const styles = {
+  /* Navbar */
+  navbar: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 200,
+    height: 'var(--navbar-height)',
+    backgroundColor: 'var(--color-sand)',
+    borderBottom: '1px solid var(--color-border)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 var(--container-pad)',
+  },
+  navBrand: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-2xl)',
+    fontWeight: 'var(--weight-regular)',
+    letterSpacing: 'var(--tracking-wider)',
+    color: 'var(--color-black)',
+    textDecoration: 'none',
+  },
+  navIcons: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-4)',
+  },
+  iconBtn: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    color: 'var(--color-charcoal)',
+    display: 'flex',
+    alignItems: 'center',
+    textDecoration: 'none',
+    transition: 'color var(--transition-fast)',
+  },
+
+  /* Page */
+  page: {
+    minHeight: '100vh',
+    backgroundColor: 'var(--color-sand)',
+    maxWidth: 'var(--container-max)',
+    margin: '0 auto',
+    padding: 'var(--space-10) var(--container-pad) var(--space-16)',
+  },
+
+  /* Filter bar */
+  filterBar: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-10)',
+    justifyContent: 'center',
+  },
+  pill: {
+    padding: 'var(--space-2) var(--space-5)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-full)',
+    background: 'transparent',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    letterSpacing: 'var(--tracking-wide)',
+    cursor: 'pointer',
+    transition: 'var(--transition-base)',
+    whiteSpace: 'nowrap',
+  },
+  pillActive: {
+    backgroundColor: 'var(--color-blue)',
+    borderColor: 'var(--color-blue-hover)',
+    color: 'var(--color-black)',
+    fontWeight: 'var(--weight-semibold)',
+  },
+
+  /* More dropdown */
+  moreWrap: {
+    position: 'relative',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: 'calc(100% + var(--space-2))',
+    left: 0,
+    zIndex: 100,
+    backgroundColor: 'var(--color-white)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-lg)',
+    boxShadow: 'var(--shadow-md)',
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: '180px',
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    padding: 'var(--space-3) var(--space-4)',
+    border: 'none',
+    background: 'transparent',
+    textAlign: 'left',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+  },
+  dropdownItemActive: {
+    backgroundColor: 'var(--color-blue)',
+    color: 'var(--color-black)',
+    fontWeight: 'var(--weight-semibold)',
+  },
+
+  /* Grid */
+  grid: {
+    display: 'grid',
+    gap: 'var(--space-6)',
+  },
+
+  /* Card */
+  card: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-xl)',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    transition: 'transform var(--transition-base), box-shadow var(--transition-base)',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+
+  /* Image */
+  imageWrap: {
+    position: 'relative',
+  },
+  image: {
+    width: '100%',
+    aspectRatio: '3 / 4',
+    objectFit: 'cover',
+    borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
+    display: 'block',
+  },
+
+  /* Stock badge */
+  badge: {
+    position: 'absolute',
+    top: 'var(--space-3)',
+    left: 'var(--space-3)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    fontFamily: 'var(--font-body)',
+    padding: '3px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+  },
+  badgeIn: {
+    backgroundColor: 'var(--color-success)',
+    color: '#166534',
+  },
+  badgeOut: {
+    backgroundColor: 'var(--color-error)',
+    color: '#991b1b',
+  },
+
+  /* Card body */
+  cardBody: {
+    padding: 'var(--space-4)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-3)',
+    flex: 1,
+  },
+
+  /* Name */
+  name: {
+    margin: 0,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-base)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-black)',
+    lineHeight: 1.4,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  },
+
+  /* Price + swatches row */
+  meta: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
+  },
+  price: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-lg)',
+    fontWeight: 'var(--weight-bold)',
+    color: 'var(--color-charcoal)',
+  },
+  colorLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal-light)',
+    letterSpacing: 'var(--tracking-wide)',
+  },
+
+  /* Color swatches */
+  swatches: {
+    display: 'flex',
+    gap: 'var(--space-1)',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  swatchWrap: {
+    position: 'relative',
+    display: 'inline-flex',
+  },
+  swatch: {
+    width: '16px',
+    height: '16px',
+    borderRadius: '50%',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+    transition: 'box-shadow var(--transition-fast)',
+  },
+  swatchActive: {
+    boxShadow: '0 0 0 2px var(--color-white), 0 0 0 3.5px var(--color-charcoal)',
+  },
+  swatchTooltip: {
+    position: 'absolute',
+    bottom: 'calc(100% + 6px)',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: 'var(--color-black)',
+    color: 'var(--color-white)',
+    fontSize: 'var(--text-xs)',
+    fontFamily: 'var(--font-body)',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    whiteSpace: 'nowrap',
+    pointerEvents: 'none',
+    zIndex: 10,
+  },
+
+  /* Add to Cart */
+  cartBtn: {
+    marginTop: 'auto',
+    width: '100%',
+    padding: 'var(--space-3) 0',
+    borderRadius: 'var(--radius-md)',
+    border: 'none',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+  },
+  cartBtnAdded: {
+    backgroundColor: 'var(--color-success)',
+    color: '#166534',
+    transition: 'background-color var(--transition-base)',
+  },
+  cartBtnNoSize: {
+    backgroundColor: 'var(--color-border)',
+    color: 'var(--color-charcoal-light)',
+    cursor: 'default',
+  },
+
+  /* Size drawer */
+  cartArea: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-2)',
+    marginTop: 'auto',
+    overflow: 'hidden',
+  },
+  sizeRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 'var(--space-1)',
+    transition: 'transform var(--transition-base), opacity var(--transition-base)',
+  },
+  sizePill: {
+    height: '28px',
+    padding: '0 var(--space-3)',
+    borderRadius: 'var(--radius-full)',
+    border: '1px solid var(--color-border)',
+    background: 'transparent',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-medium)',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+  sizePillActive: {
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-sand)',
+    borderColor: 'var(--color-charcoal)',
+  },
+  cartBtnDisabled: {
+    backgroundColor: 'var(--color-border)',
+    color: 'var(--color-charcoal-light)',
+    cursor: 'not-allowed',
+    opacity: 0.7,
+  },
+
+  /* ── Hero ── */
+  hero: {
+    position: 'relative',
+    backgroundColor: 'var(--color-sand)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  heroWave: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: '55%',
+    pointerEvents: 'none',
+  },
+  heroDot: {
+    position: 'absolute',
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-blue)',
+    opacity: 0.35,
+    pointerEvents: 'none',
+  },
+  heroContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 'var(--space-4)',
+    textAlign: 'left',
+  },
+  heroTitle: {
+    margin: 0,
+    fontFamily: 'var(--font-heading)',
+    fontSize: '4rem',
+    fontWeight: 'var(--weight-regular)',
+    letterSpacing: 'var(--tracking-wider)',
+    color: 'var(--color-black)',
+    lineHeight: 1,
+  },
+  heroTagline: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-base)',
+    fontStyle: 'italic',
+    color: 'var(--color-charcoal-light)',
+  },
+  shopNowBtn: {
+    padding: 'var(--space-3) var(--space-8)',
+    borderRadius: 'var(--radius-md)',
+    border: 'none',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+    marginTop: 'var(--space-2)',
+  },
+
+  /* ── Product count ── */
+  countRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginBottom: 'var(--space-4)',
+  },
+  countText: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+  },
+
+  /* Hero image */
+  heroImage: {
+    width: '100%',
+    height: '380px',
+    objectFit: 'cover',
+    borderRadius: 'var(--radius-2xl)',
+    display: 'block',
+  },
+
+  /* Scroll to top */
+  scrollTopBtn: {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    zIndex: 300,
+    width: '44px',
+    height: '44px',
+    borderRadius: 'var(--radius-full)',
+    border: 'none',
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-sand)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'opacity var(--transition-base)',
+    boxShadow: 'var(--shadow-md)',
+  },
+};
+
+/* ─── Toast ───────────────────────────────────────────── */
+
+function ToastContainer({ toasts }) {
+  return (
+    <div style={toastStyles.container}>
+      {toasts.map((t) => <Toast key={t.id} />)}
+    </div>
+  );
+}
+
+function Toast() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    /* Trigger enter animation on next frame */
+    const raf = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div style={{
+      ...toastStyles.toast,
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateX(0)' : 'translateX(110%)',
+    }}>
+      <ShoppingCart size={16} style={{ flexShrink: 0 }} />
+      <span>Added to cart!</span>
+    </div>
+  );
+}
+
+const toastStyles = {
+  container: {
+    position: 'fixed',
+    top: 'var(--space-6)',
+    right: 'var(--space-6)',
+    zIndex: 400,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-2)',
+    pointerEvents: 'none',
+  },
+  toast: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    padding: 'var(--space-4)',
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-sand)',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: 'var(--shadow-lg)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    transition: 'opacity var(--transition-base), transform var(--transition-base)',
+    whiteSpace: 'nowrap',
+  },
+};
