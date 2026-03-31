@@ -7,7 +7,7 @@ import Navbar from '../components/Navbar';
 
 /* ─── Constants ───────────────────────────────────────── */
 
-const FEATURED = ['All', 'Bikini Set', 'Top & Bottom Set', 'Dress', 'Pareo', 'Monokini'];
+const FEATURED = ['All', 'Bikini Set', 'Top & Bottom Set', 'Dress', 'Pareo', 'Bustier'];
 
 /* ─── Color swatch map ────────────────────────────────── */
 
