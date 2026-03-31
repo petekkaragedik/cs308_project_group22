@@ -4,7 +4,7 @@ const Product = require("./models/Product");
 const rawProducts = require("./data/products");
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({ origin: "http://localhost:3000" }));
 app.use(express.json());
 
 // TEST ROUTE
@@ -17,7 +17,10 @@ app.post("/api/login", (req, res) => {
   const { email, password } = req.body;
 
   if (email === "test@test.com" && password === "1234") {
-    return res.json({ message: "Login successful" });
+    return res.json({
+      message: "Login successful",
+      token: "fake-jwt-token"
+    });
   } else {
     return res.status(401).json({ message: "Invalid credentials" });
   }
@@ -32,7 +35,7 @@ const categories = [
   { id: "cat-summer-set", name: "Summer Set" }
 ];
 
-// PRODUCT DATA — all 253 products from mockProducts
+// PRODUCT DATA — all products from data/products.js
 const products = rawProducts.map((p) => new Product(p));
 
 // GET ALL PRODUCTS
@@ -43,7 +46,9 @@ app.get("/api/products", (req, res) => {
 // GET SINGLE PRODUCT
 app.get("/api/products/:id", (req, res) => {
   const product = products.find((p) => p.id === req.params.id);
-  if (!product) return res.status(404).json({ message: "Product not found" });
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
   res.json(product);
 });
 
