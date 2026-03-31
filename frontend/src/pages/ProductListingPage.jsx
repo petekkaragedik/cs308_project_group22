@@ -122,13 +122,17 @@ const ALL_CARDS = (() => {
       });
     }
     const group = map.get(p.model);
-    if (!group.variants.find((v) => v.color === p.color)) {
+    const existing = group.variants.find((v) => v.color === p.color);
+    if (!existing) {
       group.variants.push({
         id: p.id,
         color: p.color,
         images: p.images,
-        quantityInStock: p.quantityInStock,
+        totalStock: p.quantityInStock,
       });
+    } else {
+      /* Accumulate stock across all sizes of this model+color */
+      existing.totalStock += p.quantityInStock;
     }
   }
 
@@ -141,7 +145,7 @@ const ALL_CARDS = (() => {
         id: v.id,
         color: v.color,
         images: v.images,
-        quantityInStock: v.quantityInStock,
+        quantityInStock: v.totalStock,
         model: group.model,
         name: group.name,
         categoryName: group.categoryName,
@@ -174,6 +178,15 @@ const SIZE_MAP = (() => {
   return map;
 })();
 
+
+/* stock per individual size: "model|color|size" → quantityInStock */
+const SIZE_STOCK_MAP = (() => {
+  const map = {};
+  for (const p of mockProducts) {
+    map[`${p.model}|${p.color}|${p.size}`] = p.quantityInStock;
+  }
+  return map;
+})();
 
 /* ─── Page ────────────────────────────────────────────── */
 
@@ -497,25 +510,30 @@ function ProductCard({ card, navigate, onAddToCart }) {
         {/* Size + button drawer */}
         <div style={styles.cartArea}>
           {/* Size row — slides up on hover */}
-          {inStock && sizes.length > 0 && (
+          {sizes.length > 0 && (
             <div style={{
               ...styles.sizeRow,
               transform: drawerOpen ? 'translateY(0)' : 'translateY(110%)',
               opacity: drawerOpen ? 1 : 0,
               pointerEvents: drawerOpen ? 'auto' : 'none',
             }}>
-              {sizes.map((sz) => (
-                <button
-                  key={sz}
-                  onClick={(e) => { e.stopPropagation(); setSelectedSize(sz === selectedSize ? null : sz); }}
-                  style={{
-                    ...styles.sizePill,
-                    ...(selectedSize === sz ? styles.sizePillActive : {}),
-                  }}
-                >
-                  {sz}
-                </button>
-              ))}
+              {sizes.map((sz) => {
+                const sizeInStock = (SIZE_STOCK_MAP[`${card.model}|${card.color}|${sz}`] ?? 0) > 0;
+                return (
+                  <button
+                    key={sz}
+                    disabled={!sizeInStock}
+                    onClick={(e) => { e.stopPropagation(); if (sizeInStock) setSelectedSize(sz === selectedSize ? null : sz); }}
+                    style={{
+                      ...styles.sizePill,
+                      ...(selectedSize === sz ? styles.sizePillActive : {}),
+                      ...(!sizeInStock ? styles.sizePillDisabled : {}),
+                    }}
+                  >
+                    {sz}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -819,6 +837,11 @@ const styles = {
     backgroundColor: 'var(--color-charcoal)',
     color: 'var(--color-sand)',
     borderColor: 'var(--color-charcoal)',
+  },
+  sizePillDisabled: {
+    opacity: 0.35,
+    cursor: 'not-allowed',
+    textDecoration: 'line-through',
   },
   cartBtnDisabled: {
     backgroundColor: 'var(--color-border)',
