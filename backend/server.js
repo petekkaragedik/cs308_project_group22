@@ -1,8 +1,10 @@
 const express = require("express");
+const cors = require("cors");
 const Product = require("./models/Product");
 const rawProducts = require("./data/products");
 
 const app = express();
+app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(express.json());
 
 // TEST ROUTE
@@ -51,8 +53,8 @@ app.get("/api/categories", (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(3000, () => {
-    console.log("Server running on port 3000");
+  app.listen(3001, () => {
+    console.log("Server running on port 3001");
   });
 }
 
