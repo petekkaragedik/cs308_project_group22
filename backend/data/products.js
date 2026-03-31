@@ -1,4 +1,4 @@
-const mockProducts = [
+const products = [
   {
     "id": "S-204",
     "name": "Women's Open Back Glitter Knit Beach Dress Mini Summer Dress",
@@ -6186,7 +6186,6 @@ const mockProducts = [
     ],
     "popularity": 0
   }
-];
+];;
 
-export default mockProducts;
-
+module.exports = products;
