@@ -4,6 +4,7 @@ import { ShoppingCart, ChevronUp, CheckCheck } from 'lucide-react';
 import mockProducts from '../data/mockProducts';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
+import { useCart } from '../context/CartContext';
 
 /* ─── Constants ───────────────────────────────────────── */
 
@@ -179,6 +180,7 @@ const SIZE_MAP = (() => {
 
 export default function ProductListingPage() {
   const navigate = useNavigate();
+  const { addItem } = useCart();
   const [activeCategory, setActiveCategory] = useState('All');
   const [moreOpen, setMoreOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -349,7 +351,15 @@ export default function ProductListingPage() {
         {/* ── Product Grid ── */}
         <div ref={gridRef} style={styles.grid} className="plp-grid">
           {cards.map((card) => (
-            <ProductCard key={card.id} card={card} navigate={navigate} onAddToCart={addToast} />
+            <ProductCard
+              key={card.id}
+              card={card}
+              navigate={navigate}
+              onAddToCart={(size) => {
+                addItem(card.id, size);
+                addToast();
+              }}
+            />
           ))}
         </div>
       </div>
@@ -410,7 +420,7 @@ function ProductCard({ card, navigate, onAddToCart }) {
   function handleAddToCart(e) {
     e.stopPropagation();
     if (!selectedSize) return;
-    onAddToCart();
+    onAddToCart(selectedSize);
     setAdded(true);
     setTimeout(() => {
       setAdded(false);
