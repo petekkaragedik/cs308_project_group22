@@ -24,7 +24,7 @@ function Registration() {
         <div style={styles.card}>
           <div style={styles.header}>
             <h2 style={styles.title}>Welcome!</h2>
-            <p style={styles.subtitle}>Create Account</p>
+            <p style={styles.subtitle}>Create your account</p>
           </div>
 
           <form onSubmit={handleSubmit} style={styles.form}>
