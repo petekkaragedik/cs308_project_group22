@@ -1,10 +1,9 @@
 require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
-const mysql = require('mysql2/promise'); 
+const mysql = require('mysql2/promise');
 
-//pull from db instead of file
-const Product = require("./models/Product"); 
+const Product = require("./models/Product");
 
 const app = express();
 app.use(cors({ origin: "http://localhost:3000" }));
@@ -53,7 +52,7 @@ app.get("/api/categories", (req, res) => {
 app.get("/api/products", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM products");
-    
+
     const formattedRows = rows.map(product => {
       return {
         ...product,
@@ -71,13 +70,13 @@ app.get("/api/products", async (req, res) => {
 app.get("/api/products/:id", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM products WHERE id = ?", [req.params.id]);
-    
+
     if (rows.length === 0) {
       return res.status(404).json({ message: "Product not found" });
     }
 
     const product = rows[0];
-    
+
     if (typeof product.images === 'string') {
       product.images = JSON.parse(product.images);
     }
@@ -87,6 +86,70 @@ app.get("/api/products/:id", async (req, res) => {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch product from database" });
   }
+});
+
+// ─── Cart Endpoints ────────────────────────────────────
+// NOTE: Using in-memory storage for now.
+// When DB cart table is ready, replace cartItems array with DB queries.
+
+let cartItems = [];
+let nextId = 1;
+
+// GET /api/cart — return all cart items
+app.get("/api/cart", (req, res) => {
+  res.json(cartItems);
+});
+
+// POST /api/cart — add an item (or increment if same product+size exists)
+app.post("/api/cart", (req, res) => {
+  const { product_id, size } = req.body;
+  if (!product_id || !size) {
+    return res.status(400).json({ message: "product_id and size are required" });
+  }
+
+  const existing = cartItems.find(
+    (i) => i.product_id === product_id && i.size === size
+  );
+
+  if (existing) {
+    existing.quantity += 1;
+    return res.json(existing);
+  }
+
+  const item = { id: nextId++, product_id, size, quantity: 1 };
+  cartItems.push(item);
+  res.status(201).json(item);
+});
+
+// PUT /api/cart/:id — update quantity
+app.put("/api/cart/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const { quantity } = req.body;
+
+  if (!quantity || quantity < 1) {
+    return res.status(400).json({ message: "quantity must be at least 1" });
+  }
+
+  const item = cartItems.find((i) => i.id === id);
+  if (!item) {
+    return res.status(404).json({ message: "Cart item not found" });
+  }
+
+  item.quantity = quantity;
+  res.json(item);
+});
+
+// DELETE /api/cart/:id — remove an item
+app.delete("/api/cart/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const index = cartItems.findIndex((i) => i.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ message: "Cart item not found" });
+  }
+
+  cartItems.splice(index, 1);
+  res.json({ message: "Item removed" });
 });
 
 if (require.main === module) {
