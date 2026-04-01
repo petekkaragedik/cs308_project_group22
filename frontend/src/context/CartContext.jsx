@@ -1,55 +1,61 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'http://localhost:3000/api/cart';
+const STORAGE_KEY = 'scylla_cart';
 const CartContext = createContext(null);
 
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveToStorage(items) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
 export function CartProvider({ children }) {
-  const [cartItems, setCartItems] = useState([]);
+  const [cartItems, setCartItems] = useState(loadFromStorage);
 
-  // Load cart from API on mount
   useEffect(() => {
-    fetch(API_BASE)
-      .then((res) => res.json())
-      .then(setCartItems)
-      .catch(() => {});
-  }, []);
+    saveToStorage(cartItems);
+  }, [cartItems]);
 
-  const addItem = useCallback(async (productId, size) => {
-    const res = await fetch(API_BASE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId, size }),
-    });
-    if (!res.ok) return;
-
-    const saved = await res.json();
-
+  const addItem = useCallback((productId, size) => {
     setCartItems((prev) => {
-      const exists = prev.find((i) => i.id === saved.id);
-      if (exists) {
-        return prev.map((i) => (i.id === saved.id ? saved : i));
+      const existing = prev.find(
+        (i) => i.product_id === productId && i.size === size
+      );
+      if (existing) {
+        return prev.map((i) =>
+          i.product_id === productId && i.size === size
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
       }
-      return [...prev, saved];
+      return [
+        ...prev,
+        {
+          id: `${productId}_${size}_${Date.now()}`,
+          product_id: productId,
+          size,
+          quantity: 1,
+        },
+      ];
     });
   }, []);
 
-  const removeItem = useCallback(async (itemId) => {
-    const res = await fetch(`${API_BASE}/${itemId}`, { method: 'DELETE' });
-    if (!res.ok) return;
+  const removeItem = useCallback((itemId) => {
     setCartItems((prev) => prev.filter((i) => i.id !== itemId));
   }, []);
 
-  const updateItem = useCallback(async (itemId, quantity) => {
+  const updateItem = useCallback((itemId, quantity) => {
     if (quantity < 1) return;
-    const res = await fetch(`${API_BASE}/${itemId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quantity }),
-    });
-    if (!res.ok) return;
-
-    const saved = await res.json();
-    setCartItems((prev) => prev.map((i) => (i.id === saved.id ? saved : i)));
+    setCartItems((prev) =>
+      prev.map((i) => (i.id === itemId ? { ...i, quantity } : i))
+    );
   }, []);
 
   const clearCart = useCallback(() => {

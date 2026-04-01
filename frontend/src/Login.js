@@ -5,11 +5,36 @@ function Login() {
   const [password, setPassword] = useState('');
 
   const handleLogin = (e) => {
-    e.preventDefault(); 
+    e.preventDefault();
+<<<<<<< Updated upstream
+
+    fetch("http://localhost:3001/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log("Response:", data);
+
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+          window.location.href = "/products";
+        } else {
+          alert("Login failed");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Error occurred");
+      });
+=======
     console.log("Logging in with:", { email, password });
+>>>>>>> Stashed changes
   };
 
-  // We are adding some modern inline CSS styles here
   const styles = {
     container: {
       display: 'flex',
@@ -22,7 +47,7 @@ function Login() {
       backgroundColor: 'white',
       padding: '40px',
       borderRadius: '12px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.1)', // This creates the nice shadow
+      boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
       width: '100%',
       maxWidth: '380px'
     },
@@ -54,7 +79,7 @@ function Login() {
     button: {
       width: '100%',
       padding: '14px',
-      backgroundColor: '#0056b3', // A nice professional blue
+      backgroundColor: '#0056b3',
       color: 'white',
       border: 'none',
       borderRadius: '8px',
@@ -71,14 +96,17 @@ function Login() {
       <div style={styles.card}>
         <h2 style={styles.title}>Welcome Back</h2>
         <form onSubmit={handleLogin}>
-          
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
           <div style={styles.inputGroup}>
             <label style={styles.label}>Email Address</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              required 
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
               style={styles.input}
               placeholder="Enter your email"
             />
@@ -86,11 +114,11 @@ function Login() {
 
           <div style={styles.inputGroup}>
             <label style={styles.label}>Password</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              required 
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
               style={styles.input}
               placeholder="Enter your password"
             />
@@ -99,10 +127,9 @@ function Login() {
           <button type="submit" style={styles.button}>
             Sign In
           </button>
-
-        </form>
-      </div>
-    </div>
+        </form >
+      </div >
+    </div >
   );
 }
 

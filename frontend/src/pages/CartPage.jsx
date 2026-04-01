@@ -1,297 +1,281 @@
-import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Minus, Plus, Trash2, ShoppingCart } from 'lucide-react';
-import mockProducts from '../data/mockProducts';
+import { Link } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import mockProducts from '../data/mockProducts';
+
+function formatPrice(price) {
+  return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getProduct(productId) {
+  return mockProducts.find((p) => p.id === productId) ?? null;
+}
 
 export default function CartPage() {
-  const navigate = useNavigate();
   const { cartItems, removeItem, updateItem } = useCart();
 
-  const productMap = useMemo(() => {
-    const map = {};
-    mockProducts.forEach((p) => { map[p.id] = p; });
-    return map;
-  }, []);
-
-  const rows = useMemo(
-    () =>
-      cartItems.map((item) => ({
-        ...item,
-        product: productMap[item.product_id],
-      })),
-    [cartItems, productMap]
-  );
-
-  const total = rows.reduce(
-    (sum, r) => sum + (r.product ? r.product.price * r.quantity : 0),
-    0
-  );
+  const total = cartItems.reduce((sum, item) => {
+    const p = getProduct(item.product_id);
+    return sum + (p ? p.price * item.quantity : 0);
+  }, 0);
 
   return (
-    <div style={styles.page}>
+    <>
       <Navbar />
-
-      <div style={styles.container}>
+      <div style={styles.page}>
         <h1 style={styles.heading}>Your Cart</h1>
 
-        {rows.length === 0 ? (
+        {cartItems.length === 0 ? (
           <div style={styles.empty}>
-            <ShoppingCart size={48} color="var(--color-charcoal-light)" />
-            <p style={styles.emptyText}>Your cart is empty</p>
-            <button style={styles.ctaBtn} onClick={() => navigate('/products')}>
-              Continue Shopping
-            </button>
+            <p style={styles.emptyText}>Your cart is empty.</p>
+            <Link to="/products" style={styles.shopLink}>Browse Products</Link>
           </div>
         ) : (
-          <>
-            <div style={styles.list}>
-              {rows.map((row) => {
-                if (!row.product) return null;
-                const { product } = row;
+          <div style={styles.layout}>
+            <div style={styles.itemList}>
+              {cartItems.map((item) => {
+                const product = getProduct(item.product_id);
+                if (!product) return null;
                 return (
-                  <div key={row.id} style={styles.row}>
+                  <div key={item.id} style={styles.card}>
                     <img
-                      src={product.images?.[0]}
+                      src={product.images[0]}
                       alt={product.name}
-                      style={styles.thumb}
-                      onClick={() => navigate(`/products/${product.id}`)}
+                      style={styles.image}
                     />
-
                     <div style={styles.info}>
                       <p style={styles.name}>{product.name}</p>
-                      <p style={styles.meta}>Size: {row.size}</p>
-                      <p style={styles.price}>
-                        {(product.price * row.quantity).toLocaleString('tr-TR', {
-                          style: 'currency',
-                          currency: 'TRY',
-                        })}
-                      </p>
-                    </div>
-
-                    <div style={styles.actions}>
-                      <div style={styles.stepper}>
+                      <p style={styles.meta}>{product.color} · Size {item.size}</p>
+                      <p style={styles.price}>{formatPrice(product.price)}</p>
+                      <div style={styles.qtyRow}>
                         <button
-                          style={styles.stepBtn}
-                          onClick={() => updateItem(row.id, row.quantity - 1)}
-                          disabled={row.quantity <= 1}
+                          style={styles.qtyBtn}
+                          onClick={() => item.quantity > 1 && updateItem(item.id, item.quantity - 1)}
+                          disabled={item.quantity <= 1}
+                          aria-label="Decrease quantity"
                         >
-                          <Minus size={14} />
+                          −
                         </button>
-                        <span style={styles.qty}>{row.quantity}</span>
+                        <span style={styles.qtyNum}>{item.quantity}</span>
                         <button
-                          style={styles.stepBtn}
-                          onClick={() => updateItem(row.id, row.quantity + 1)}
+                          style={styles.qtyBtn}
+                          onClick={() => updateItem(item.id, item.quantity + 1)}
+                          aria-label="Increase quantity"
                         >
-                          <Plus size={14} />
+                          +
                         </button>
                       </div>
-                      <button
-                        style={styles.removeBtn}
-                        onClick={() => removeItem(row.id)}
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
+                    <button
+                      style={styles.removeBtn}
+                      onClick={() => removeItem(item.id)}
+                      aria-label="Remove item"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 );
               })}
             </div>
 
             <div style={styles.summary}>
-              <span style={styles.totalLabel}>Order Total</span>
-              <span style={styles.totalValue}>
-                {total.toLocaleString('tr-TR', {
-                  style: 'currency',
-                  currency: 'TRY',
-                })}
-              </span>
+              <h2 style={styles.summaryHeading}>Order Summary</h2>
+              <div style={styles.summaryRow}>
+                <span>Subtotal</span>
+                <span>{formatPrice(total)}</span>
+              </div>
+              <div style={styles.summaryRow}>
+                <span>Shipping</span>
+                <span style={{ color: 'var(--color-charcoal)' }}>Calculated at checkout</span>
+              </div>
+              <div style={styles.divider} />
+              <div style={{ ...styles.summaryRow, fontWeight: 'var(--weight-semibold)' }}>
+                <span>Total</span>
+                <span>{formatPrice(total)}</span>
+              </div>
+              <button style={styles.checkoutBtn}>Proceed to Checkout</button>
+              <Link to="/products" style={styles.continueLink}>Continue Shopping</Link>
             </div>
-
-            <button
-              style={styles.shopBtn}
-              onClick={() => navigate('/products')}
-            >
-              Continue Shopping
-            </button>
-          </>
+          </div>
         )}
       </div>
-
       <Footer />
-    </div>
+    </>
   );
 }
 
-/* ─── Styles (design tokens) ─────────────────────────── */
-
 const styles = {
   page: {
-    backgroundColor: 'var(--color-sand)',
-    minHeight: '100vh',
-  },
-  container: {
-    maxWidth: 'var(--container-max)',
+    maxWidth: 1100,
     margin: '0 auto',
     padding: 'var(--space-8) var(--container-pad)',
+    minHeight: '70vh',
   },
   heading: {
     fontFamily: 'var(--font-heading)',
-    fontSize: 'var(--text-3xl)',
     fontWeight: 'var(--weight-regular)',
+    fontSize: 'var(--text-3xl)',
     color: 'var(--color-black)',
-    marginBottom: 'var(--space-6)',
+    marginBottom: 'var(--space-8)',
   },
-
-  /* Empty state */
   empty: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 'var(--space-4)',
-    padding: 'var(--space-16) 0',
+    textAlign: 'center',
+    paddingTop: 'var(--space-16)',
   },
   emptyText: {
-    fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-lg)',
-    color: 'var(--color-charcoal-light)',
+    color: 'var(--color-charcoal)',
+    marginBottom: 'var(--space-4)',
   },
-  ctaBtn: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-base)',
-    fontWeight: 'var(--weight-semibold)',
+  shopLink: {
+    display: 'inline-block',
     padding: 'var(--space-3) var(--space-6)',
     backgroundColor: 'var(--color-yellow)',
-    border: 'none',
+    color: 'var(--color-black)',
     borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
+    textDecoration: 'none',
+    fontFamily: 'var(--font-body)',
+    fontWeight: 'var(--weight-semibold)',
+    fontSize: 'var(--text-sm)',
   },
-
-  /* Item list */
-  list: {
+  layout: {
+    display: 'flex',
+    gap: 'var(--space-8)',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
+  itemList: {
+    flex: 1,
+    minWidth: 280,
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--space-4)',
   },
-  row: {
+  card: {
     display: 'flex',
-    alignItems: 'center',
     gap: 'var(--space-4)',
-    backgroundColor: 'var(--color-white)',
+    backgroundColor: 'white',
     borderRadius: 'var(--radius-lg)',
-    padding: 'var(--space-4)',
     boxShadow: 'var(--shadow-card)',
+    padding: 'var(--space-4)',
+    alignItems: 'flex-start',
   },
-  thumb: {
-    width: 90,
-    height: 90,
+  image: {
+    width: 100,
+    height: 120,
     objectFit: 'cover',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
+    borderRadius: 'var(--radius-md)',
+    flexShrink: 0,
   },
   info: {
     flex: 1,
-    minWidth: 0,
   },
   name: {
-    fontFamily: 'var(--font-body)',
+    fontFamily: 'var(--font-heading)',
     fontSize: 'var(--text-base)',
-    fontWeight: 'var(--weight-medium)',
     color: 'var(--color-black)',
-    margin: 0,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    fontWeight: 'var(--weight-regular)',
+    marginBottom: 'var(--space-1)',
+    lineHeight: 1.4,
   },
   meta: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal)',
+    marginBottom: 'var(--space-2)',
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-sm)',
-    color: 'var(--color-charcoal-light)',
-    margin: 'var(--space-1) 0',
   },
   price: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-base)',
+    fontSize: 'var(--text-sm)',
     fontWeight: 'var(--weight-semibold)',
-    color: 'var(--color-charcoal)',
-    margin: 0,
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    marginBottom: 'var(--space-3)',
   },
-
-  /* Quantity stepper + remove */
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-4)',
-  },
-  stepper: {
+  qtyRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-2)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '2px',
   },
-  stepBtn: {
+  qtyBtn: {
     width: 28,
     height: 28,
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--color-sand)',
+    cursor: 'pointer',
+    fontSize: 'var(--text-base)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: 'none',
-    background: 'none',
-    cursor: 'pointer',
-    color: 'var(--color-charcoal)',
-  },
-  qty: {
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-semibold)',
-    minWidth: 20,
+  },
+  qtyNum: {
+    minWidth: 24,
     textAlign: 'center',
+    fontSize: 'var(--text-sm)',
+    fontFamily: 'var(--font-body)',
+    fontWeight: 'var(--weight-medium)',
   },
   removeBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    color: 'var(--color-error)',
+    color: 'var(--color-charcoal)',
+    padding: 'var(--space-1)',
     display: 'flex',
     alignItems: 'center',
+    flexShrink: 0,
   },
-
-  /* Summary */
   summary: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 'var(--space-6)',
-    padding: 'var(--space-4)',
-    backgroundColor: 'var(--color-white)',
+    width: 300,
+    backgroundColor: 'white',
     borderRadius: 'var(--radius-lg)',
     boxShadow: 'var(--shadow-card)',
+    padding: 'var(--space-6)',
+    flexShrink: 0,
   },
-  totalLabel: {
+  summaryHeading: {
     fontFamily: 'var(--font-heading)',
     fontSize: 'var(--text-xl)',
+    fontWeight: 'var(--weight-regular)',
     color: 'var(--color-black)',
+    marginBottom: 'var(--space-4)',
   },
-  totalValue: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-xl)',
-    fontWeight: 'var(--weight-bold)',
-    color: 'var(--color-charcoal)',
-  },
-  shopBtn: {
-    display: 'block',
-    margin: 'var(--space-4) auto 0',
-    fontFamily: 'var(--font-body)',
+  summaryRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
     fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-medium)',
     color: 'var(--color-charcoal)',
-    background: 'none',
+    fontFamily: 'var(--font-body)',
+    marginBottom: 'var(--space-3)',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'var(--color-border)',
+    margin: 'var(--space-3) 0',
+  },
+  checkoutBtn: {
+    width: '100%',
+    padding: 'var(--space-3) 0',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
     border: 'none',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
     cursor: 'pointer',
+    fontFamily: 'var(--font-body)',
+    marginTop: 'var(--space-4)',
+    marginBottom: 'var(--space-3)',
+  },
+  continueLink: {
+    display: 'block',
+    textAlign: 'center',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
     textDecoration: 'underline',
   },
 };
