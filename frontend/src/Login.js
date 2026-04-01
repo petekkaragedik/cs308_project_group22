@@ -1,90 +1,17 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Mail, Lock } from 'lucide-react';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-
-    fetch("http://localhost:3001/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ email, password })
-    })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Response:", data);
-
-        if (data.token) {
-          localStorage.setItem("token", data.token);
-          window.location.href = "/products";
-        } else {
-          alert("Login failed");
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        alert("Error occurred");
-      });
-  };
-
-  const styles = {
-    container: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '70vh',
-      fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
-    },
-    card: {
-      backgroundColor: 'white',
-      padding: '40px',
-      borderRadius: '12px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-      width: '100%',
-      maxWidth: '380px'
-    },
-    title: {
-      textAlign: 'center',
-      color: '#333',
-      marginBottom: '25px',
-      fontSize: '24px'
-    },
-    inputGroup: {
-      marginBottom: '20px'
-    },
-    label: {
-      display: 'block',
-      marginBottom: '8px',
-      color: '#555',
-      fontWeight: '600',
-      fontSize: '14px'
-    },
-    input: {
-      width: '100%',
-      padding: '12px',
-      border: '1px solid #ccc',
-      borderRadius: '8px',
-      boxSizing: 'border-box',
-      fontSize: '15px',
-      outline: 'none'
-    },
-    button: {
-      width: '100%',
-      padding: '14px',
-      backgroundColor: '#0056b3',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      marginTop: '10px',
-      transition: '0.3s'
-    }
+    console.log("Logging in with:", email, password);
+    // API call - daha sonra gelecek bu?
   };
 
   return (
@@ -104,25 +31,45 @@ function Login() {
               placeholder="Enter your email"
             />
           </div>
+          
 
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={styles.input}
-              placeholder="Enter your password"
-            />
-          </div>
+          <form onSubmit={handleSubmit} style={styles.form}>
+            <div style={styles.inputGroup}>
+              <Mail size={20} color="var(--color-charcoal-light)" style={styles.icon} />
+              <input 
+                type="email" 
+                placeholder="Email Address" 
+                style={styles.input} 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
-          <button type="submit" style={styles.button}>
-            Sign In
-          </button>
-        </form>
+            <div style={styles.inputGroup}>
+              <Lock size={20} color="var(--color-charcoal-light)" style={styles.icon} />
+              <input 
+                type="password" 
+                placeholder="Password" 
+                style={styles.input}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" style={styles.button}>
+              Sign in
+            </button>
+          </form>
+
+          <p style={styles.footerText}>
+            If you don't have an account <Link to="/register" style={styles.link}>click here to registwr</Link>
+          </p>
+        </div>
       </div>
-    </div>
+      <Footer />
+    </>
   );
 }
 
