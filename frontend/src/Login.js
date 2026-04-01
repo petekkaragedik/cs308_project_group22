@@ -11,83 +11,19 @@ function Login() {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log("Logging in with:", email, password);
-  };
-
-  const styles = {
-    container: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '80vh',
-      fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
-    },
-    card: {
-      backgroundColor: 'white',
-      padding: '40px',
-      borderRadius: '12px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-      width: '100%',
-      maxWidth: '420px',
-    },
-    title: {
-      textAlign: 'center',
-      color: '#333',
-      marginBottom: '25px',
-      fontSize: '24px',
-    },
-    form: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
-    },
-    inputGroup: {
-      display: 'flex',
-      alignItems: 'center',
-      border: '1px solid #ccc',
-      borderRadius: '8px',
-      padding: '10px 12px',
-    },
-    icon: {
-      marginRight: '10px',
-      flexShrink: 0,
-    },
-    input: {
-      border: 'none',
-      outline: 'none',
-      width: '100%',
-      fontSize: '15px',
-    },
-    button: {
-      width: '100%',
-      padding: '14px',
-      backgroundColor: '#28a745',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      marginTop: '4px',
-    },
-    footerText: {
-      textAlign: 'center',
-      marginTop: '16px',
-      fontSize: '14px',
-      color: '#555',
-    },
-    link: {
-      color: '#007bff',
-      textDecoration: 'none',
-      fontWeight: '600',
-    },
+    //API call buraya gelecek
   };
 
   return (
     <>
       <Navbar />
-      <div style={styles.container}>
+      <div style={styles.page}>
+        <img src="/scylla_logo.png" alt="Scylla Logo" style={styles.logo} />
         <div style={styles.card}>
-          <h2 style={styles.title}>Welcome Back</h2>
+          <div style={styles.header}>
+            <h2 style={styles.title}>Welcome back!</h2>
+            <p style={styles.subtitle}>Sign in to your account</p>
+          </div>
 
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.inputGroup}>
@@ -115,10 +51,9 @@ function Login() {
             </div>
 
             <button type="submit" style={styles.button}>
-              Sign in
+              SIGN IN
             </button>
           </form>
-
           <p style={styles.footerText}>
             If you don't have an account <Link to="/register" style={styles.link}>click here to register</Link>
           </p>
@@ -128,5 +63,108 @@ function Login() {
     </>
   );
 }
+
+const styles = {
+  page: {
+    minHeight: '80vh',
+    backgroundColor: 'var(--color-sand)',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 'var(--space-10) var(--container-pad)',
+  },
+  card: {
+    backgroundColor: 'var(--color-white)',
+    padding: 'var(--space-10)',
+    borderRadius: 'var(--radius-xl)',
+    boxShadow: 'var(--shadow-card)',
+    width: '100%',
+    maxWidth: '450px',
+    marginTop: 'var(--space-4)',
+  },
+  logo: {
+    width: '120px',
+    height: 'auto',
+    marginBottom: 'var(--space-6)',
+    display: 'block',
+  },
+  header: {
+    textAlign: 'center',
+    marginBottom: 'var(--space-8)',
+  },
+  title: {
+    margin: '0 0 var(--space-2) 0',
+    fontFamily: 'var(--font-heading)',
+    fontSize: '2rem',
+    fontWeight: 'var(--weight-regular)',
+    color: 'var(--color-black)',
+    letterSpacing: 'var(--tracking-wide)',
+  },
+  subtitle: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-charcoal-light)',
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-4)',
+  },
+  inputGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-3) var(--space-4)',
+    backgroundColor: 'var(--color-white)',
+    transition: 'border-color var(--transition-fast)',
+  },
+  icon: {
+    flexShrink: 0,
+  },
+  input: {
+    border: 'none',
+    outline: 'none',
+    backgroundColor: 'transparent',
+    width: '100%',
+    marginLeft: 'var(--space-3)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    letterSpacing: 'var(--tracking-wide)',
+    color: 'var(--color-charcoal)',
+  },
+  button: {
+    width: '100%',
+    padding: 'var(--space-4) 0',
+    marginTop: 'var(--space-2)',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    border: 'none',
+    borderRadius: 'var(--radius-md)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+    textTransform: 'uppercase',
+  },
+  footerText: {
+    textAlign: 'center',
+    marginTop: 'var(--space-6)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+  },
+  link: {
+    color: 'var(--color-charcoal)',
+    textDecoration: 'none',
+    fontWeight: 'var(--weight-semibold)',
+    borderBottom: '1px solid var(--color-charcoal)',
+  }
+};
 
 export default Login;
