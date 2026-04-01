@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, ChevronUp, CheckCheck } from 'lucide-react';
-import mockProducts from '../data/mockProducts';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useCart } from '../context/CartContext';
@@ -97,22 +96,11 @@ function formatPrice(price) {
   return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/* ─── Pre-build flat card list at module level (runs once) ─
- *
- * Step 1: group by model to collect color variants and collapse sizes.
- * Step 2: flatten — one CARD per color variant, each card carries the
- *         full siblings array so swatches can reference other cards.
- *
- * Each card: {
- *   id, color, images, quantityInStock,   ← this specific variant
- *   model, name, categoryName, price,      ← shared model info
- *   siblings: [{ id, color }]              ← ALL variants of this model
- * }
- */
-const ALL_CARDS = (() => {
-  /* Step 1 — group by model */
+/* ─── Data-building helpers (accept a products array) ─── */
+
+function buildAllCards(products) {
   const map = new Map();
-  for (const p of mockProducts) {
+  for (const p of products) {
     if (!map.has(p.model)) {
       map.set(p.model, {
         model: p.model,
@@ -132,12 +120,9 @@ const ALL_CARDS = (() => {
         totalStock: p.quantityInStock,
       });
     } else {
-      /* Accumulate stock across all sizes of this model+color */
       existing.totalStock += p.quantityInStock;
     }
   }
-
-  /* Step 2 — flatten */
   const cards = [];
   for (const group of map.values()) {
     const siblings = group.variants.map((v) => ({ id: v.id, color: v.color }));
@@ -156,12 +141,11 @@ const ALL_CARDS = (() => {
     }
   }
   return cards;
-})();
+}
 
-/* sizes keyed by "model|color" → sorted size array */
-const SIZE_MAP = (() => {
+function buildSizeMap(products) {
   const map = {};
-  for (const p of mockProducts) {
+  for (const p of products) {
     const key = `${p.model}|${p.color}`;
     if (!map[key]) map[key] = [];
     if (!map[key].includes(p.size)) map[key].push(p.size);
@@ -177,29 +161,40 @@ const SIZE_MAP = (() => {
     });
   }
   return map;
-})();
+}
 
-
-/* stock per individual size: "model|color|size" → quantityInStock */
-const SIZE_STOCK_MAP = (() => {
+function buildSizeStockMap(products) {
   const map = {};
-  for (const p of mockProducts) {
+  for (const p of products) {
     map[`${p.model}|${p.color}|${p.size}`] = p.quantityInStock;
   }
   return map;
-})();
+}
 
 /* ─── Page ────────────────────────────────────────────── */
 
 export default function ProductListingPage() {
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
   const [moreOpen, setMoreOpen] = useState(false);
   const dropdownRef = useRef(null);
   const gridRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/products')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      })
+      .then((data) => { setProducts(data); setLoading(false); })
+      .catch(() => { setError(true); setLoading(false); });
+  }, []);
 
   useEffect(() => {
     function onScroll() { setShowScrollTop(window.scrollY > 300); }
@@ -215,10 +210,14 @@ export default function ProductListingPage() {
     }, 2500);
   }
 
+  const allCards = useMemo(() => buildAllCards(products), [products]);
+  const sizeMap = useMemo(() => buildSizeMap(products), [products]);
+  const sizeStockMap = useMemo(() => buildSizeStockMap(products), [products]);
+
   const allCategories = useMemo(() => {
-    const unique = [...new Set(mockProducts.map((p) => p.categoryName))].sort();
+    const unique = [...new Set(products.map((p) => p.categoryName))].sort();
     return ['All', ...unique];
-  }, []);
+  }, [products]);
 
   const moreCategories = useMemo(
     () => allCategories.filter((c) => !FEATURED.includes(c)),
@@ -226,9 +225,9 @@ export default function ProductListingPage() {
   );
 
   const cards = useMemo(() => {
-    if (activeCategory === 'All') return ALL_CARDS;
-    return ALL_CARDS.filter((c) => c.categoryName === activeCategory);
-  }, [activeCategory]);
+    if (activeCategory === 'All') return allCards;
+    return allCards.filter((c) => c.categoryName === activeCategory);
+  }, [activeCategory, allCards]);
 
   useEffect(() => {
     function handleClick(e) {
@@ -246,6 +245,18 @@ export default function ProductListingPage() {
   }
 
   const activeInMore = moreCategories.includes(activeCategory);
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <span style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xl)' }}>Loading...</span>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <span style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xl)' }}>Could not load products. Please try again.</span>
+    </div>
+  );
 
   return (
     <>
@@ -372,6 +383,8 @@ export default function ProductListingPage() {
                 addItem(card.id, size);
                 addToast();
               }}
+              sizeMap={sizeMap}
+              sizeStockMap={sizeStockMap}
             />
           ))}
         </div>
@@ -401,13 +414,13 @@ export default function ProductListingPage() {
 
 /* ─── Product Card ────────────────────────────────────── */
 
-function ProductCard({ card, navigate, onAddToCart }) {
+function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap }) {
   const [hovered, setHovered] = useState(false);
   const [selectedSize, setSelectedSize] = useState(null);
   const [added, setAdded] = useState(false);
   const inStock = card.quantityInStock > 0;
 
-  const sizes = SIZE_MAP[`${card.model}|${card.color}`] ?? [];
+  const sizes = sizeMap[`${card.model}|${card.color}`] ?? [];
   /* Show size drawer when hovered OR a size is already selected */
   const drawerOpen = hovered || selectedSize !== null;
 
@@ -528,7 +541,7 @@ function ProductCard({ card, navigate, onAddToCart }) {
               pointerEvents: drawerOpen ? 'auto' : 'none',
             }}>
               {sizes.map((sz) => {
-                const sizeInStock = (SIZE_STOCK_MAP[`${card.model}|${card.color}|${sz}`] ?? 0) > 0;
+                const sizeInStock = (sizeStockMap[`${card.model}|${card.color}|${sz}`] ?? 0) > 0;
                 return (
                   <button
                     key={sz}

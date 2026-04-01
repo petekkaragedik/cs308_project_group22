@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, Heart, ShoppingCart, User, X } from 'lucide-react';
-import mockProducts from '../data/mockProducts';
 import { useCart } from '../context/CartContext';
 
 /* ─── Helpers ─────────────────────────────────────────── */
@@ -10,22 +9,19 @@ function formatPrice(price) {
   return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/* One representative product per model+color for search results */
-const SEARCH_POOL = (() => {
-  const seen = new Set();
-  return mockProducts.filter((p) => {
-    const key = `${p.model}|${p.color}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-})();
-
 /* ─── Navbar ──────────────────────────────────────────── */
 
 export default function Navbar() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const { cartCount } = useCart();
+  const [allProducts, setAllProducts] = useState([]);
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/products')
+      .then((res) => res.json())
+      .then((data) => setAllProducts(data))
+      .catch(() => {});
+  }, []);
 
   function openOverlay() { setOverlayOpen(true); }
   function closeOverlay() { setOverlayOpen(false); }
@@ -59,18 +55,28 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {overlayOpen && <SearchOverlay onClose={closeOverlay} />}
+      {overlayOpen && <SearchOverlay onClose={closeOverlay} allProducts={allProducts} />}
     </>
   );
 }
 
 /* ─── Search Overlay ──────────────────────────────────── */
 
-function SearchOverlay({ onClose }) {
+function SearchOverlay({ onClose, allProducts }) {
   const [query, setQuery] = useState('');
   const [visible, setVisible] = useState(false);
   const inputRef = useRef(null);
   const navigate = useNavigate();
+
+  const searchPool = useMemo(() => {
+    const seen = new Set();
+    return allProducts.filter((p) => {
+      const key = `${p.model}|${p.color}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [allProducts]);
 
   /* Fade in on mount */
   useEffect(() => {
@@ -95,7 +101,7 @@ function SearchOverlay({ onClose }) {
 
   /* Search results */
   const results = query.trim()
-    ? SEARCH_POOL.filter((p) => {
+    ? searchPool.filter((p) => {
         const q = query.toLowerCase();
         return (
           p.name.toLowerCase().includes(q) ||

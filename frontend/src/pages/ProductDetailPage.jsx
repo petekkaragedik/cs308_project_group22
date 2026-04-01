@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
-import mockProducts from '../data/mockProducts';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
@@ -161,12 +160,40 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { addItem } = useCart();
 
-  const product = useMemo(() => mockProducts.find((p) => p.id === id), [id]);
+  const [product, setProduct] = useState(null);
+  const [modelProducts, setModelProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null); // null | 'not_found' | 'error'
 
-  const modelProducts = useMemo(
-    () => (product ? mockProducts.filter((p) => p.model === product.model) : []),
-    [product]
-  );
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setProduct(null);
+    setModelProducts([]);
+
+    let fetchedProduct;
+
+    fetch(`http://localhost:3001/api/products/${id}`)
+      .then((res) => {
+        if (res.status === 404) throw Object.assign(new Error(), { code: 'not_found' });
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then((p) => {
+        fetchedProduct = p;
+        setProduct(p);
+        return fetch('http://localhost:3001/api/products');
+      })
+      .then((res) => res.json())
+      .then((all) => {
+        setModelProducts(all.filter((p) => p.model === fetchedProduct.model));
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.code === 'not_found' ? 'not_found' : 'error');
+        setLoading(false);
+      });
+  }, [id]);
 
   /* One representative id per color (first entry found) */
   const colorVariants = useMemo(() => {
@@ -310,19 +337,29 @@ export default function ProductDetailPage() {
     setReviewText('');
   }
 
-  /* ── Not found ── */
-  if (!product) {
-    return (
-      <>
-        <Navbar />
-        <div style={styles.notFound}>
-          <p style={styles.notFoundText}>Product not found.</p>
-          <Link to="/products" style={styles.backLink}>← Back to all products</Link>
-        </div>
-        <Footer />
-      </>
-    );
-  }
+  /* ── Loading / error / not-found ── */
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <span style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xl)' }}>Loading...</span>
+    </div>
+  );
+
+  if (error === 'not_found') return (
+    <>
+      <Navbar />
+      <div style={styles.notFound}>
+        <p style={styles.notFoundText}>Product not found.</p>
+        <Link to="/products" style={styles.backLink}>← Back to all products</Link>
+      </div>
+      <Footer />
+    </>
+  );
+
+  if (error) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <span style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xl)' }}>Could not load product. Please try again.</span>
+    </div>
+  );
 
   const inStock = totalStock > 0;
   const images = product.images ?? [];
