@@ -4,6 +4,7 @@ import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Zo
 import mockProducts from '../data/mockProducts';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useCart } from '../context/CartContext';
 
 /* ─── Color map ───────────────────────────────────────── */
 
@@ -158,6 +159,7 @@ function StarRow({ rating, size = 16 }) {
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { addItem } = useCart();
 
   const product = useMemo(() => mockProducts.find((p) => p.id === id), [id]);
 
@@ -296,6 +298,7 @@ export default function ProductDetailPage() {
 
   function handleAddToCart() {
     if (!selectedSize || totalStock === 0) return;
+    addItem(product.id, selectedSize);
     setCartAdded(true);
     addToast('Added to cart!');
     setTimeout(() => setCartAdded(false), 1500);

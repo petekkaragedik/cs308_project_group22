@@ -6,6 +6,7 @@ function Login() {
 
   const handleLogin = (e) => {
     e.preventDefault();
+<<<<<<< Updated upstream
 
     fetch("http://localhost:3001/api/login", {
       method: "POST",
@@ -29,6 +30,9 @@ function Login() {
         console.error(err);
         alert("Error occurred");
       });
+=======
+    console.log("Logging in with:", { email, password });
+>>>>>>> Stashed changes
   };
 
   const styles = {
@@ -92,6 +96,10 @@ function Login() {
       <div style={styles.card}>
         <h2 style={styles.title}>Welcome Back</h2>
         <form onSubmit={handleLogin}>
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
           <div style={styles.inputGroup}>
             <label style={styles.label}>Email Address</label>
             <input
@@ -119,9 +127,9 @@ function Login() {
           <button type="submit" style={styles.button}>
             Sign In
           </button>
-        </form>
-      </div>
-    </div>
+        </form >
+      </div >
+    </div >
   );
 }
 
