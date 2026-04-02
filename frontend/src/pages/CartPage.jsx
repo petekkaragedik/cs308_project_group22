@@ -40,15 +40,22 @@ export default function CartPage() {
                 if (!product) return null;
                 return (
                   <div key={item.id} style={styles.card}>
-                    <img
-                      src={product.images[0]}
-                      alt={product.name}
-                      style={styles.image}
-                    />
+                    <Link to={`/products/${product.id}`}>
+                      <img
+                        src={product.images[0]}
+                        alt={product.name}
+                        style={styles.image}
+                      />
+                    </Link>
                     <div style={styles.info}>
-                      <p style={styles.name}>{product.name}</p>
+                      <Link to={`/products/${product.id}`} style={styles.nameLink}>
+                        <p style={styles.name}>{product.name}</p>
+                      </Link>
                       <p style={styles.meta}>{product.color} · Size {item.size}</p>
                       <p style={styles.price}>{formatPrice(product.price)}</p>
+                      {item.quantity >= product.quantityInStock && (
+                        <p style={styles.stockWarning}>Max stock reached</p>
+                      )}
                       <div style={styles.qtyRow}>
                         <button
                           style={styles.qtyBtn}
@@ -62,6 +69,7 @@ export default function CartPage() {
                         <button
                           style={styles.qtyBtn}
                           onClick={() => updateItem(item.id, item.quantity + 1)}
+                          disabled={item.quantity >= product.quantityInStock}
                           aria-label="Increase quantity"
                         >
                           +
@@ -172,6 +180,10 @@ const styles = {
   info: {
     flex: 1,
   },
+  nameLink: {
+    textDecoration: 'none',
+    color: 'inherit',
+  },
   name: {
     fontFamily: 'var(--font-heading)',
     fontSize: 'var(--text-base)',
@@ -192,6 +204,12 @@ const styles = {
     color: 'var(--color-black)',
     fontFamily: 'var(--font-body)',
     marginBottom: 'var(--space-3)',
+  },
+  stockWarning: {
+    fontSize: 'var(--text-xs)',
+    color: '#b91c1c',
+    fontFamily: 'var(--font-body)',
+    marginBottom: 'var(--space-1)',
   },
   qtyRow: {
     display: 'flex',

@@ -1,7 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import mockProducts from '../data/mockProducts';
 
 const STORAGE_KEY = 'scylla_cart';
 const CartContext = createContext(null);
+
+function getStock(productId) {
+  const p = mockProducts.find((p) => p.id === productId);
+  return p ? p.quantityInStock : 0;
+}
 
 function loadFromStorage() {
   try {
@@ -25,16 +31,19 @@ export function CartProvider({ children }) {
 
   const addItem = useCallback((productId, size) => {
     setCartItems((prev) => {
+      const stock = getStock(productId);
       const existing = prev.find(
         (i) => i.product_id === productId && i.size === size
       );
       if (existing) {
+        if (existing.quantity >= stock) return prev;
         return prev.map((i) =>
           i.product_id === productId && i.size === size
             ? { ...i, quantity: i.quantity + 1 }
             : i
         );
       }
+      if (stock <= 0) return prev;
       return [
         ...prev,
         {
@@ -54,7 +63,11 @@ export function CartProvider({ children }) {
   const updateItem = useCallback((itemId, quantity) => {
     if (quantity < 1) return;
     setCartItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, quantity } : i))
+      prev.map((i) => {
+        if (i.id !== itemId) return i;
+        const stock = getStock(i.product_id);
+        return { ...i, quantity: Math.min(quantity, stock) };
+      })
     );
   }, []);
 
