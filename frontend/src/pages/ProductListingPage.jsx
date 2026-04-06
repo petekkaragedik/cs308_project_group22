@@ -180,21 +180,36 @@ export default function ProductListingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [allCategories, setAllCategories] = useState(['All']);
   const [moreOpen, setMoreOpen] = useState(false);
   const dropdownRef = useRef(null);
   const gridRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [toasts, setToasts] = useState([]);
 
+  // Fetch categories from backend on mount
   useEffect(() => {
-    fetch('http://localhost:3001/api/products')
+    fetch('http://localhost:3001/api/categories')
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((cats) => setAllCategories(['All', ...cats]))
+      .catch(() => {}); // keep default ['All'] on error
+  }, []);
+
+  // Fetch products: all or filtered by category
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const url = activeCategory === 'All'
+      ? 'http://localhost:3001/api/products'
+      : `http://localhost:3001/api/products/category/${encodeURIComponent(activeCategory)}`;
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch');
         return res.json();
       })
       .then((data) => { setProducts(data); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, []);
+  }, [activeCategory]);
 
   useEffect(() => {
     function onScroll() { setShowScrollTop(window.scrollY > 300); }
@@ -214,20 +229,12 @@ export default function ProductListingPage() {
   const sizeMap = useMemo(() => buildSizeMap(products), [products]);
   const sizeStockMap = useMemo(() => buildSizeStockMap(products), [products]);
 
-  const allCategories = useMemo(() => {
-    const unique = [...new Set(products.map((p) => p.categoryName))].sort();
-    return ['All', ...unique];
-  }, [products]);
-
   const moreCategories = useMemo(
     () => allCategories.filter((c) => !FEATURED.includes(c)),
     [allCategories]
   );
 
-  const cards = useMemo(() => {
-    if (activeCategory === 'All') return allCards;
-    return allCards.filter((c) => c.categoryName === activeCategory);
-  }, [activeCategory, allCards]);
+  const cards = allCards;
 
   useEffect(() => {
     function handleClick(e) {

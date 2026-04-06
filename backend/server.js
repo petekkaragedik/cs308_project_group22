@@ -36,17 +36,16 @@ app.post("/api/login", (req, res) => {
   }
 });
 
-// categories
-const categories = [
-  { id: "cat-necklace", name: "Fashion Necklace" },
-  { id: "cat-bikini-set", name: "Bikini Set" },
-  { id: "cat-earrings", name: "Earrings" },
-  { id: "cat-bracelet", name: "Bracelet" },
-  { id: "cat-summer-set", name: "Summer Set" }
-];
-
-app.get("/api/categories", (req, res) => {
-  res.json(categories);
+app.get("/api/categories", async (_req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT DISTINCT categoryName FROM products WHERE categoryName IS NOT NULL AND categoryName != '' ORDER BY categoryName"
+    );
+    res.json(rows.map(r => r.categoryName));
+  } catch (error) {
+    console.error("Database query error:", error);
+    res.status(500).json({ message: "Failed to fetch categories" });
+  }
 });
 
 app.get("/api/products", async (req, res) => {
