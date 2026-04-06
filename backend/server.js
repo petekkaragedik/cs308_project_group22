@@ -101,6 +101,16 @@ app.get("/api/products/:id", async (req, res) => {
       product.images = JSON.parse(product.images);
     }
 
+    const [variantRows] = await db.query(
+      "SELECT * FROM products WHERE model = ? AND id != ?",
+      [product.model, product.id]
+    );
+
+    product.modelVariants = variantRows.map(v => ({
+      ...v,
+      images: typeof v.images === 'string' ? JSON.parse(v.images) : v.images
+    }));
+
     res.json(product);
   } catch (error) {
     console.error("Database query error:", error);
