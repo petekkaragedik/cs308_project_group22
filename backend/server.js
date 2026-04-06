@@ -67,6 +67,26 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+app.get("/api/products/category/:categoryName", async (req, res) => {
+  try {
+    const { categoryName } = req.params;
+    const [rows] = await db.query(
+      "SELECT * FROM products WHERE categoryName = ?",
+      [categoryName]
+    );
+
+    const formattedRows = rows.map(product => ({
+      ...product,
+      images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
+    }));
+
+    res.json(formattedRows);
+  } catch (error) {
+    console.error("Database query error:", error);
+    res.status(500).json({ message: "Failed to fetch products by category" });
+  }
+});
+
 app.get("/api/products/:id", async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM products WHERE id = ?", [req.params.id]);
