@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const Product = require("./models/Product");
 
@@ -22,17 +24,82 @@ app.get("/", (req, res) => {
   res.send("Server is running with MySQL");
 });
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function signToken(user) {
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    process.env.JWT_SECRET || 'dev_secret',
+    { expiresIn: '7d' }
+  );
+}
+
+// register
+app.post("/api/register", async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Name is required" });
+  }
+  if (!email || !EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ message: "Valid email is required" });
+  }
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters" });
+  }
+
+  try {
+    const [existing] = await db.query("SELECT id FROM users WHERE email = ?", [email]);
+    if (existing.length > 0) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const [result] = await db.query(
+      "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+      [name.trim(), email.toLowerCase(), hashed]
+    );
+
+    const user = { id: result.insertId, email: email.toLowerCase(), role: 'customer' };
+    return res.status(201).json({
+      message: "Registration successful",
+      token: signToken(user),
+      user: { id: user.id, name: name.trim(), email: user.email, role: user.role }
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ message: "Registration failed" });
+  }
+});
+
 // login
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
 
-  if (email === "test@test.com" && password === "1234") {
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  try {
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email.toLowerCase()]);
+    if (rows.length === 0) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const user = rows[0];
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
     return res.json({
       message: "Login successful",
-      token: "fake-jwt-token"
+      token: signToken(user),
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
-  } else {
-    return res.status(401).json({ message: "Invalid credentials" });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Login failed" });
   }
 });
 
@@ -45,6 +112,33 @@ app.get("/api/categories", async (_req, res) => {
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
+
+// search products by name or description
+app.get("/api/products/search", async (req, res) => {
+  const { q } = req.query;
+
+  if (!q || !q.trim()) {
+    return res.status(400).json({ message: "Search query is required" });
+  }
+
+  try {
+    const term = `%${q.trim()}%`;
+    const [rows] = await db.query(
+      "SELECT * FROM products WHERE name LIKE ? OR description LIKE ?",
+      [term, term]
+    );
+
+    const formattedRows = rows.map(product => ({
+      ...product,
+      images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
+    }));
+
+    res.json(formattedRows);
+  } catch (error) {
+    console.error("Search error:", error);
+    res.status(500).json({ message: "Search failed" });
   }
 });
 
