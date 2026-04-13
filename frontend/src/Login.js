@@ -11,7 +11,7 @@ function Login() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    fetch("http://localhost:3001/api/login", {
+    fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })

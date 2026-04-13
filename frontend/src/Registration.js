@@ -9,10 +9,33 @@ function Registration() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log("Registering user:", { fullName, email, password });
-    // API call eklenecek
+    setError('');
+    setLoading(true);
+
+    fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: fullName, email, password })
+    })
+      .then(res => res.json().then(data => ({ status: res.status, data })))
+      .then(({ status, data }) => {
+        setLoading(false);
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+          window.location.href = "/products";
+        } else {
+          setError(data.message || "Registration failed");
+        }
+      })
+      .catch(() => {
+        setLoading(false);
+        setError("Something went wrong. Please try again.");
+      });
   };
 
   return (
@@ -28,6 +51,7 @@ function Registration() {
           </div>
 
           <form onSubmit={handleSubmit} style={styles.form}>
+            {error && <p style={styles.error}>{error}</p>}
             {/* Full Name Input */}
             <div style={styles.inputGroup}>
               <User size={20} color="var(--color-charcoal-light)" style={styles.icon} />
@@ -67,8 +91,8 @@ function Registration() {
               />
             </div>
 
-            <button type="submit" style={styles.button}>
-              Create Account
+            <button type="submit" style={styles.button} disabled={loading}>
+              {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 
@@ -182,6 +206,13 @@ const styles = {
     textDecoration: 'none',
     fontWeight: 'var(--weight-semibold)',
     borderBottom: '1px solid var(--color-charcoal)',
+  },
+  error: {
+    color: '#c0392b',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    textAlign: 'center',
+    margin: 0,
   }
 };
 

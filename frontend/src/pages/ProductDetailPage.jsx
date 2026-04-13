@@ -173,7 +173,7 @@ export default function ProductDetailPage() {
 
     let fetchedProduct;
 
-    fetch(`http://localhost:3001/api/products/${id}`)
+    fetch(`/api/products/${id}`)
       .then((res) => {
         if (res.status === 404) throw Object.assign(new Error(), { code: 'not_found' });
         if (!res.ok) throw new Error();
@@ -182,7 +182,7 @@ export default function ProductDetailPage() {
       .then((p) => {
         fetchedProduct = p;
         setProduct(p);
-        return fetch('http://localhost:3001/api/products');
+        return fetch('/api/products');
       })
       .then((res) => res.json())
       .then((all) => {

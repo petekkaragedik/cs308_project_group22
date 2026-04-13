@@ -189,7 +189,7 @@ export default function ProductListingPage() {
 
   // Fetch categories from backend on mount
   useEffect(() => {
-    fetch('http://localhost:3001/api/categories')
+    fetch('/api/categories')
       .then((res) => res.ok ? res.json() : Promise.reject())
       .then((cats) => setAllCategories(['All', ...cats]))
       .catch(() => {}); // keep default ['All'] on error
@@ -200,8 +200,8 @@ export default function ProductListingPage() {
     setLoading(true);
     setError(null);
     const url = activeCategory === 'All'
-      ? 'http://localhost:3001/api/products'
-      : `http://localhost:3001/api/products/category/${encodeURIComponent(activeCategory)}`;
+      ? '/api/products'
+      : `/api/products/category/${encodeURIComponent(activeCategory)}`;
     fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch');
