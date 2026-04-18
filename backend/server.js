@@ -34,6 +34,20 @@ function signToken(user) {
   );
 }
 
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  try {
+    const token = header.slice(7);
+    req.user = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
 // register
 app.post("/api/register", async (req, res) => {
   const { name, email, password } = req.body;
@@ -208,6 +222,32 @@ app.get("/api/products/:id", async (req, res) => {
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch product from database" });
+  }
+});
+
+// ─── Favorites ─────────────────────────────────────────
+
+// GET /api/favorites — return favorite products for the authenticated user
+app.get("/api/favorites", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT p.*, f.created_at AS favorited_at
+       FROM favorites f
+       JOIN products p ON p.id = f.product_id
+       WHERE f.user_id = ?
+       ORDER BY f.created_at DESC`,
+      [req.user.id]
+    );
+
+    const formatted = rows.map(product => ({
+      ...product,
+      images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error("Favorites query error:", error);
+    res.status(500).json({ message: "Failed to fetch favorites" });
   }
 });
 
