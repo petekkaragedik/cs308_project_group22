@@ -5,6 +5,7 @@ import Register from './Registration';
 import ProductListingPage from './pages/ProductListingPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import CartPage from './pages/CartPage';
+import WishlistPage from './pages/WishlistPage';
 import { CartProvider } from './context/CartContext';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
             <Route path="/products" element={<ProductListingPage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
+            <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/" element={<Navigate to="/login" />} />
           </Routes>
         </div>
