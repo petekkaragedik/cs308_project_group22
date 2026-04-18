@@ -43,6 +43,17 @@ async function setup() {
   `);
   console.log('Products table ready');
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      user_id INT NOT NULL,
+      product_id VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, product_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('Favorites table ready');
+
   await db.end();
 }
 
