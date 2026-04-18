@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Heart } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -51,6 +52,7 @@ export default function WishlistPage() {
         @media (max-width: 560px) { .wl-grid { grid-template-columns: 1fr; } }
         .wl-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
         .wl-btn:hover { background-color: var(--color-yellow-hover) !important; }
+        .wl-link-btn:hover { opacity: 0.65 !important; }
       `}</style>
 
       <Navbar />
@@ -78,10 +80,12 @@ export default function WishlistPage() {
 
         {!loading && !error && favorites.length === 0 && (
           <EmptyState
-            heading="No favorites yet"
-            body="Browse the collection and tap the heart to save pieces you love."
+            heading="Your wishlist is empty"
+            body="Save the crochet pieces that catch your eye — they'll be waiting for you right here, ready for the next beach day."
             cta="SHOP THE COLLECTION"
             onCta={() => navigate('/products')}
+            secondaryCta="Back to home →"
+            onSecondaryCta={() => navigate('/')}
           />
         )}
 
@@ -145,14 +149,33 @@ function WishlistCard({ product, onClick }) {
 
 /* ─── Empty state / Message ───────────────────────────── */
 
-function EmptyState({ heading, body, cta, onCta }) {
+function EmptyState({ heading, body, cta, onCta, secondaryCta, onSecondaryCta }) {
   return (
     <div style={styles.empty}>
+      <div style={styles.emptyIconWrap} aria-hidden="true">
+        <div style={styles.emptyIconHalo} />
+        <Heart
+          size={42}
+          strokeWidth={1.5}
+          style={styles.emptyIcon}
+        />
+      </div>
       <h2 style={styles.emptyHeading}>{heading}</h2>
       <p style={styles.emptyBody}>{body}</p>
-      <button className="wl-btn" style={styles.button} onClick={onCta}>
-        {cta}
-      </button>
+      <div style={styles.emptyActions}>
+        <button className="wl-btn" style={styles.button} onClick={onCta}>
+          {cta}
+        </button>
+        {secondaryCta && (
+          <button
+            className="wl-link-btn"
+            style={styles.linkBtn}
+            onClick={onSecondaryCta}
+          >
+            {secondaryCta}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -290,22 +313,52 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 'var(--space-4)',
-    padding: 'var(--space-16) var(--container-pad)',
+    padding: 'var(--space-20) var(--container-pad)',
     textAlign: 'center',
+  },
+  emptyIconWrap: {
+    position: 'relative',
+    width: '120px',
+    height: '120px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 'var(--space-2)',
+  },
+  emptyIconHalo: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-blue)',
+    opacity: 0.55,
+  },
+  emptyIcon: {
+    position: 'relative',
+    color: 'var(--color-charcoal)',
+    fill: 'none',
   },
   emptyHeading: {
     margin: 0,
     fontFamily: 'var(--font-heading)',
-    fontSize: 'var(--text-2xl)',
+    fontSize: 'var(--text-3xl)',
     fontWeight: 'var(--weight-regular)',
+    letterSpacing: 'var(--tracking-tight)',
     color: 'var(--color-black)',
   },
   emptyBody: {
     margin: 0,
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-base)',
+    lineHeight: 1.6,
     color: 'var(--color-charcoal-light)',
-    maxWidth: '420px',
+    maxWidth: '440px',
+  },
+  emptyActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 'var(--space-4)',
+    marginTop: 'var(--space-4)',
   },
   button: {
     padding: 'var(--space-3) var(--space-8)',
@@ -320,7 +373,18 @@ const styles = {
     textTransform: 'uppercase',
     cursor: 'pointer',
     transition: 'background-color var(--transition-fast)',
-    marginTop: 'var(--space-2)',
+  },
+  linkBtn: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    letterSpacing: 'var(--tracking-wide)',
+    transition: 'opacity var(--transition-fast)',
   },
   message: {
     textAlign: 'center',
