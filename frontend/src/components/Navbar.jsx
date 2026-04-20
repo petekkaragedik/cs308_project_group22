@@ -49,7 +49,11 @@ export default function Navbar() {
               </span>
             )}
           </Link>
-          <Link to="/login" style={styles.iconBtn} aria-label="Account">
+          <Link
+            to={localStorage.getItem('token') ? '/profile' : '/login'}
+            style={styles.iconBtn}
+            aria-label="Account"
+          >
             <User size={22} />
           </Link>
         </div>
