@@ -251,6 +251,63 @@ app.get("/api/favorites", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/favorites — add a product to the authenticated user's favorites
+app.post("/api/favorites", requireAuth, async (req, res) => {
+  const { product_id } = req.body;
+
+  if (product_id === undefined || product_id === null || product_id === "") {
+    return res.status(400).json({ message: "product_id is required" });
+  }
+
+  try {
+    const [productRows] = await db.query(
+      "SELECT id FROM products WHERE id = ?",
+      [product_id]
+    );
+    if (productRows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [result] = await db.query(
+      "INSERT IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)",
+      [req.user.id, String(product_id)]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "Product already in favorites" });
+    }
+
+    return res.status(201).json({
+      message: "Product added to favorites",
+      favorite: { user_id: req.user.id, product_id: String(product_id) }
+    });
+  } catch (error) {
+    console.error("Add favorite error:", error);
+    res.status(500).json({ message: "Failed to add favorite" });
+  }
+});
+
+// DELETE /api/favorites/:productId — remove a product from the authenticated user's favorites
+app.delete("/api/favorites/:productId", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+
+  try {
+    const [result] = await db.query(
+      "DELETE FROM favorites WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Favorite not found" });
+    }
+
+    res.json({ message: "Product removed from favorites" });
+  } catch (error) {
+    console.error("Remove favorite error:", error);
+    res.status(500).json({ message: "Failed to remove favorite" });
+  }
+});
+
 // ─── Cart Endpoints ────────────────────────────────────
 // NOTE: Using in-memory storage for now.
 // When DB cart table is ready, replace cartItems array with DB queries.
