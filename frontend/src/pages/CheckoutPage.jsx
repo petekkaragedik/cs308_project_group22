@@ -97,10 +97,6 @@ export default function CheckoutPage() {
       <Navbar />
       <div style={styles.page}>
         <h1 style={styles.heading}>Checkout</h1>
-        <p style={styles.lead}>
-          Mock payment creates your order and sends the invoice PDF via Brevo (requires BREVO_API_KEY and
-          BREVO_SENDER_EMAIL on the backend).
-        </p>
 
         {cartItems.length === 0 ? (
           <div style={styles.empty}>
