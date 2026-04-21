@@ -534,7 +534,16 @@ app.get("/api/products/search", async (req, res) => {
 
 app.get("/api/products", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM products");
+    const { sort } = req.query;
+
+    // Sort modes: price_asc = cheapest first, price_desc = most expensive first,
+    // popularity = most popular first (by popularity integer field); default = no ordering.
+    let orderClause = "";
+    if (sort === "price_asc") orderClause = " ORDER BY price ASC";
+    else if (sort === "price_desc") orderClause = " ORDER BY price DESC";
+    else if (sort === "popularity") orderClause = " ORDER BY popularity DESC";
+
+    const [rows] = await db.query(`SELECT * FROM products${orderClause}`);
 
     const formattedRows = rows.map(product => {
       return {
