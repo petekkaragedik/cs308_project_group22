@@ -289,3 +289,7 @@ module.exports = function createOrderRoutes(db) {
 
   return router;
 };
+
+module.exports.roundMoney = roundMoney;
+module.exports.buildPayloadFromRows = buildPayloadFromRows;
+module.exports.mapCheckoutError = mapCheckoutError;
