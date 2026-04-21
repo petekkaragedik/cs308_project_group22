@@ -1,4 +1,7 @@
-require('dotenv').config();
+const path = require("path");
+// Always load .env from the backend/ folder (not the shell's current working directory)
+require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
+
 const express = require("express");
 const cors = require("cors");
 const mysql = require('mysql2/promise');
@@ -7,10 +10,12 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
-const Product = require("./models/Product");
+const createOrderRoutes = require("./routes/orders");
 
 const app = express();
-app.use(cors({ origin: "http://localhost:3000" }));
+// Allow browser calls from CRA (any port / localhost vs 127.0.0.1) when using REACT_APP_API_URL
+app.use(cors({ origin: true, credentials: true }));
+// Larger limit needed for base64-encoded avatar uploads
 app.use(express.json({ limit: '8mb' }));
 
 // db connection
@@ -534,15 +539,15 @@ app.delete("/api/me/addresses/:id", requireAuth, async (req, res) => {
 app.get("/api/me/orders", requireAuth, async (req, res) => {
   try {
     const [orders] = await db.query(
-      `SELECT id, order_number, status, total, placed_at
-       FROM orders WHERE user_id = ? ORDER BY placed_at DESC`,
-      [req.user.id]
+      `SELECT id, invoice_number, status, total_amount, currency, created_at
+       FROM orders WHERE customer_email = ? ORDER BY created_at DESC`,
+      [req.user.email]
     );
     if (orders.length === 0) return res.json([]);
 
     const ids = orders.map(o => o.id);
     const [items] = await db.query(
-      `SELECT order_id, id, product_id, product_name, product_image, quantity, price
+      `SELECT order_id, id, product_id, product_name, size, quantity, unit_price, line_total
        FROM order_items WHERE order_id IN (?)`,
       [ids]
     );
@@ -552,18 +557,20 @@ app.get("/api/me/orders", requireAuth, async (req, res) => {
         id: it.id,
         productId: it.product_id,
         name: it.product_name,
-        image: it.product_image,
+        size: it.size,
         qty: it.quantity,
-        price: Number(it.price),
+        price: Number(it.unit_price),
+        lineTotal: Number(it.line_total),
       });
       return acc;
     }, {});
 
     res.json(orders.map(o => ({
-      id: o.order_number,
-      placedAt: o.placed_at,
-      status: o.status,
-      total: Number(o.total),
+      id: o.invoice_number,
+      placedAt: o.created_at,
+      status: o.status === 'in_transit' ? 'in-transit' : o.status,
+      total: Number(o.total_amount),
+      currency: o.currency,
       items: byOrder[o.id] || [],
     })));
   } catch (err) {
@@ -595,6 +602,63 @@ app.get("/api/favorites", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Favorites query error:", error);
     res.status(500).json({ message: "Failed to fetch favorites" });
+  }
+});
+
+// POST /api/favorites — add a product to the authenticated user's favorites
+app.post("/api/favorites", requireAuth, async (req, res) => {
+  const { product_id } = req.body;
+
+  if (product_id === undefined || product_id === null || product_id === "") {
+    return res.status(400).json({ message: "product_id is required" });
+  }
+
+  try {
+    const [productRows] = await db.query(
+      "SELECT id FROM products WHERE id = ?",
+      [product_id]
+    );
+    if (productRows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [result] = await db.query(
+      "INSERT IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)",
+      [req.user.id, String(product_id)]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "Product already in favorites" });
+    }
+
+    return res.status(201).json({
+      message: "Product added to favorites",
+      favorite: { user_id: req.user.id, product_id: String(product_id) }
+    });
+  } catch (error) {
+    console.error("Add favorite error:", error);
+    res.status(500).json({ message: "Failed to add favorite" });
+  }
+});
+
+// DELETE /api/favorites/:productId — remove a product from the authenticated user's favorites
+app.delete("/api/favorites/:productId", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+
+  try {
+    const [result] = await db.query(
+      "DELETE FROM favorites WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Favorite not found" });
+    }
+
+    res.json({ message: "Product removed from favorites" });
+  } catch (error) {
+    console.error("Remove favorite error:", error);
+    res.status(500).json({ message: "Failed to remove favorite" });
   }
 });
 
@@ -661,6 +725,8 @@ app.delete("/api/cart/:id", (req, res) => {
   cartItems.splice(index, 1);
   res.json({ message: "Item removed" });
 });
+
+app.use("/api/orders", createOrderRoutes(db));
 
 if (require.main === module) {
   app.listen(3001, () => {

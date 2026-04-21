@@ -4,6 +4,7 @@ import { ShoppingCart, ChevronUp, CheckCheck } from 'lucide-react';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import { useCart } from '../context/CartContext';
+import { apiUrl } from '../apiBase';
 
 /* ─── Constants ───────────────────────────────────────── */
 
@@ -189,7 +190,7 @@ export default function ProductListingPage() {
 
   // Fetch categories from backend on mount
   useEffect(() => {
-    fetch('/api/categories')
+    fetch(apiUrl('/api/categories'))
       .then((res) => res.ok ? res.json() : Promise.reject())
       .then((cats) => setAllCategories(['All', ...cats]))
       .catch(() => {}); // keep default ['All'] on error
@@ -200,8 +201,8 @@ export default function ProductListingPage() {
     setLoading(true);
     setError(null);
     const url = activeCategory === 'All'
-      ? '/api/products'
-      : `/api/products/category/${encodeURIComponent(activeCategory)}`;
+      ? apiUrl('/api/products')
+      : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}`);
     fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch');

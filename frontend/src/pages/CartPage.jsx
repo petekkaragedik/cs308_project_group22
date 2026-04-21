@@ -103,7 +103,9 @@ export default function CartPage() {
                 <span>Total</span>
                 <span>{formatPrice(total)}</span>
               </div>
-              <button style={styles.checkoutBtn}>Proceed to Checkout</button>
+              <Link to="/checkout" style={styles.checkoutBtn}>
+                Proceed to Checkout
+              </Link>
               <Link to="/products" style={styles.continueLink}>Continue Shopping</Link>
             </div>
           </div>
@@ -275,8 +277,11 @@ const styles = {
     margin: 'var(--space-3) 0',
   },
   checkoutBtn: {
+    display: 'block',
     width: '100%',
+    boxSizing: 'border-box',
     padding: 'var(--space-3) 0',
+    textAlign: 'center',
     backgroundColor: 'var(--color-yellow)',
     color: 'var(--color-black)',
     border: 'none',
@@ -287,6 +292,7 @@ const styles = {
     fontFamily: 'var(--font-body)',
     marginTop: 'var(--space-4)',
     marginBottom: 'var(--space-3)',
+    textDecoration: 'none',
   },
   continueLink: {
     display: 'block',

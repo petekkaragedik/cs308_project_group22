@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Mail, Lock } from 'lucide-react';
+import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
@@ -17,7 +18,7 @@ function Registration() {
     setError('');
     setLoading(true);
 
-    fetch("/api/register", {
+    fetch(apiUrl("/api/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: fullName, email, password })

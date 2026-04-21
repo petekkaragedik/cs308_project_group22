@@ -4,6 +4,7 @@ import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Zo
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { apiUrl } from '../apiBase';
 
 /* ─── Color map ───────────────────────────────────────── */
 
@@ -173,7 +174,7 @@ export default function ProductDetailPage() {
 
     let fetchedProduct;
 
-    fetch(`/api/products/${id}`)
+    fetch(apiUrl(`/api/products/${id}`))
       .then((res) => {
         if (res.status === 404) throw Object.assign(new Error(), { code: 'not_found' });
         if (!res.ok) throw new Error();
@@ -182,7 +183,7 @@ export default function ProductDetailPage() {
       .then((p) => {
         fetchedProduct = p;
         setProduct(p);
-        return fetch('/api/products');
+        return fetch(apiUrl('/api/products'));
       })
       .then((res) => res.json())
       .then((all) => {
@@ -311,6 +312,46 @@ export default function ProductDetailPage() {
 
   /* Reset state + scroll to top when navigating between variants */
   useEffect(() => { setSelectedSize(null); setActiveImage(0); window.scrollTo({ top: 0, behavior: 'instant' }); }, [id]);
+
+  /* Load initial wishlist state for this product */
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !id) { setWishlisted(false); return; }
+    fetch('/api/favorites', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((favs) => {
+        setWishlisted(Array.isArray(favs) && favs.some((p) => String(p.id) === String(id)));
+      })
+      .catch(() => {});
+  }, [id]);
+
+  const toggleWishlist = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    const next = !wishlisted;
+    setWishlisted(next);
+    try {
+      const res = await fetch(
+        next ? '/api/favorites' : `/api/favorites/${id}`,
+        {
+          method: next ? 'POST' : 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: next ? JSON.stringify({ product_id: id }) : undefined,
+        }
+      );
+      if (!res.ok && res.status !== 409 && res.status !== 404) {
+        setWishlisted(!next);
+      }
+    } catch {
+      setWishlisted(!next);
+    }
+  }, [wishlisted, id, navigate]);
 
   /* ── Review form state ── */
   const [reviewRating, setReviewRating] = useState(0);
@@ -585,7 +626,7 @@ export default function ProductDetailPage() {
             {/* WISHLIST */}
             <button
               className="pdp-wishlist-btn"
-              onClick={() => setWishlisted((w) => !w)}
+              onClick={toggleWishlist}
               style={{
                 ...styles.wishlistBtn,
                 borderColor: wishlisted ? 'var(--color-blue)' : 'var(--color-border)',
