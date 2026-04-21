@@ -562,8 +562,16 @@ app.get("/api/products", async (req, res) => {
 app.get("/api/products/category/:categoryName", async (req, res) => {
   try {
     const { categoryName } = req.params;
+    const { sort } = req.query;
+
+    // Reuse the same three sort modes as /api/products
+    let orderClause = "";
+    if (sort === "price_asc") orderClause = " ORDER BY price ASC";
+    else if (sort === "price_desc") orderClause = " ORDER BY price DESC";
+    else if (sort === "popularity") orderClause = " ORDER BY popularity DESC";
+
     const [rows] = await db.query(
-      "SELECT * FROM products WHERE categoryName = ?",
+      `SELECT * FROM products WHERE categoryName = ?${orderClause}`,
       [categoryName]
     );
 
