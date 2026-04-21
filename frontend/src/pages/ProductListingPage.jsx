@@ -10,6 +10,13 @@ import { apiUrl } from '../apiBase';
 
 const FEATURED = ['All', 'Bikini Set', 'Top & Bottom Set', 'Dress', 'Pareo', 'Bustier'];
 
+const SORT_OPTIONS = [
+  { value: '', label: 'Default' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
+  { value: 'popularity', label: 'Popularity' },
+];
+
 /* ─── Color swatch map ────────────────────────────────── */
 
 const COLOR_MAP = {
@@ -181,9 +188,12 @@ export default function ProductListingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [sortBy, setSortBy] = useState(() => localStorage.getItem('scylla_sort') || '');
   const [allCategories, setAllCategories] = useState(['All']);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const sortRef = useRef(null);
   const gridRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -196,13 +206,20 @@ export default function ProductListingPage() {
       .catch(() => {}); // keep default ['All'] on error
   }, []);
 
-  // Fetch products: all or filtered by category
+  // Persist sort preference across page refreshes
+  useEffect(() => {
+    if (sortBy) localStorage.setItem('scylla_sort', sortBy);
+    else localStorage.removeItem('scylla_sort');
+  }, [sortBy]);
+
+  // Fetch products: all or filtered by category, with optional sort applied to both
   useEffect(() => {
     setLoading(true);
     setError(null);
+    const params = sortBy ? `?sort=${sortBy}` : '';
     const url = activeCategory === 'All'
-      ? apiUrl('/api/products')
-      : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}`);
+      ? apiUrl(`/api/products${params}`)
+      : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}${params}`);
     fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch');
@@ -210,7 +227,7 @@ export default function ProductListingPage() {
       })
       .then((data) => { setProducts(data); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [activeCategory]);
+  }, [activeCategory, sortBy]);
 
   useEffect(() => {
     function onScroll() { setShowScrollTop(window.scrollY > 300); }
@@ -241,6 +258,9 @@ export default function ProductListingPage() {
     function handleClick(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setMoreOpen(false);
+      }
+      if (sortRef.current && !sortRef.current.contains(e.target)) {
+        setSortOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -282,6 +302,7 @@ export default function ProductListingPage() {
         .hero-image-col { display: block; }
         @media (max-width: 640px) { .hero-inner { grid-template-columns: 1fr; } .hero-image-col { display: none; } }
         .scroll-top-btn:hover { opacity: 0.85 !important; }
+        .sort-opt:hover { background: color-mix(in srgb, var(--color-blue) 15%, transparent) !important; }
       `}</style>
 
       <Navbar />
@@ -335,44 +356,80 @@ export default function ProductListingPage() {
       <div style={styles.page}>
         {/* ── Filter Bar ── */}
         <div style={styles.filterBar}>
-          {FEATURED.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => selectCategory(cat)}
-              style={activeCategory === cat ? { ...styles.pill, ...styles.pillActive } : styles.pill}
-            >
-              {cat}
-            </button>
-          ))}
-
-          {moreCategories.length > 0 && (
-            <div ref={dropdownRef} style={styles.moreWrap}>
+          {/* Row 1: category pills */}
+          <div style={styles.pillGroup}>
+            {FEATURED.map((cat) => (
               <button
-                onClick={() => setMoreOpen((o) => !o)}
-                style={activeInMore ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+                key={cat}
+                onClick={() => selectCategory(cat)}
+                style={activeCategory === cat ? { ...styles.pill, ...styles.pillActive } : styles.pill}
               >
-                {activeInMore ? activeCategory : 'More'} ▾
+                {cat}
               </button>
-              {moreOpen && (
-                <div style={styles.dropdown}>
-                  {moreCategories.map((cat) => (
-                    <button
-                      key={cat}
-                      className="dropdown-item-btn"
-                      onClick={() => selectCategory(cat)}
-                      style={
-                        activeCategory === cat
-                          ? { ...styles.dropdownItem, ...styles.dropdownItemActive }
-                          : styles.dropdownItem
-                      }
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
+            ))}
+
+            {moreCategories.length > 0 && (
+              <div ref={dropdownRef} style={styles.moreWrap}>
+                <button
+                  onClick={() => setMoreOpen((o) => !o)}
+                  style={activeInMore ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+                >
+                  {activeInMore ? activeCategory : 'More'} ▾
+                </button>
+                {moreOpen && (
+                  <div style={styles.dropdown}>
+                    {moreCategories.map((cat) => (
+                      <button
+                        key={cat}
+                        className="dropdown-item-btn"
+                        onClick={() => selectCategory(cat)}
+                        style={
+                          activeCategory === cat
+                            ? { ...styles.dropdownItem, ...styles.dropdownItemActive }
+                            : styles.dropdownItem
+                        }
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Row 2: sort dropdown, right-aligned */}
+          <div style={styles.sortRow}>
+            <div style={styles.sortControl}>
+              <span style={styles.sortLabel}>Sort by:</span>
+              <div ref={sortRef} style={styles.sortDropdownWrap}>
+                <button
+                  onClick={() => setSortOpen((o) => !o)}
+                  style={styles.sortBtn}
+                >
+                  {SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? 'Default'}
+                  <span style={styles.sortBtnChevron} aria-hidden="true">▾</span>
+                </button>
+                {sortOpen && (
+                  <ul style={styles.sortList}>
+                    {SORT_OPTIONS.map((opt) => (
+                      <li
+                        key={opt.value}
+                        className="sort-opt"
+                        onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                        style={{
+                          ...styles.sortOption,
+                          ...(sortBy === opt.value ? styles.sortOptionActive : {}),
+                        }}
+                      >
+                        {opt.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* ── Product count ── */}
@@ -614,11 +671,83 @@ const styles = {
   /* Filter bar */
   filterBar: {
     display: 'flex',
+    flexDirection: 'column',
+    gap: 0,
+    marginBottom: 'var(--space-10)',
+  },
+  pillGroup: {
+    display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 'var(--space-2)',
-    marginBottom: 'var(--space-10)',
     justifyContent: 'center',
+    gap: 'var(--space-2)',
+  },
+
+  /* Sort row sits below pills, right-aligned */
+  sortRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginTop: 'var(--space-2)',
+  },
+  sortControl: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+  },
+  sortLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    whiteSpace: 'nowrap',
+  },
+  sortDropdownWrap: {
+    position: 'relative',
+  },
+  sortBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--space-3)',
+    minWidth: '160px',
+    padding: 'var(--space-2) var(--space-3)',
+    backgroundColor: 'var(--color-sand)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid rgba(51,51,51,0.2)',
+    cursor: 'pointer',
+  },
+  sortBtnChevron: {
+    pointerEvents: 'none',
+    fontSize: 'var(--text-xs)',
+    lineHeight: 1,
+    flexShrink: 0,
+  },
+  sortList: {
+    position: 'absolute',
+    top: 'calc(100% + 4px)',
+    right: 0,
+    zIndex: 200,
+    minWidth: '160px',
+    margin: 0,
+    padding: 'var(--space-1) 0',
+    listStyle: 'none',
+    backgroundColor: 'var(--color-sand)',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: 'var(--shadow-card)',
+    overflow: 'hidden',
+  },
+  sortOption: {
+    padding: 'var(--space-2) var(--space-3)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    cursor: 'pointer',
+    borderLeft: '3px solid transparent',
+  },
+  sortOptionActive: {
+    borderLeft: '3px solid var(--color-blue)',
   },
   pill: {
     padding: 'var(--space-2) var(--space-5)',
