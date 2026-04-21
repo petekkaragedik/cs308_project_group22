@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock } from 'lucide-react';
+import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
@@ -11,7 +12,7 @@ function Login() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    fetch("/api/login", {
+    fetch(apiUrl("/api/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })

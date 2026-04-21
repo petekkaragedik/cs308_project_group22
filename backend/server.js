@@ -1,14 +1,30 @@
-require('dotenv').config();
+const path = require("path");
+// Always load .env from the backend/ folder (not the shell's current working directory)
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
 const express = require("express");
 const cors = require("cors");
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const Product = require("./models/Product");
+const createOrderRoutes = require("./routes/orders");
 
 const app = express();
-app.use(cors({ origin: "http://localhost:3000" }));
+
+const brevoReady =
+  Boolean(process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim()) &&
+  Boolean(process.env.BREVO_SENDER_EMAIL && String(process.env.BREVO_SENDER_EMAIL).trim());
+if (brevoReady) {
+  console.log("[config] Brevo: API key + BREVO_SENDER_EMAIL yüklendi (fatura maili gönderilebilir).");
+} else {
+  console.warn(
+    "[config] Brevo: BREVO_API_KEY veya BREVO_SENDER_EMAIL eksik — fatura e-postası gönderilmez. backend/.env ve .env.example bak."
+  );
+}
+
+// Allow browser calls from CRA (any port / localhost vs 127.0.0.1) when using REACT_APP_API_URL
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 // db connection
@@ -274,6 +290,8 @@ app.delete("/api/cart/:id", (req, res) => {
   cartItems.splice(index, 1);
   res.json({ message: "Item removed" });
 });
+
+app.use("/api/orders", createOrderRoutes(db));
 
 if (require.main === module) {
   app.listen(3001, () => {
