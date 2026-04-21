@@ -24,6 +24,34 @@ const db = mysql.createPool({
   database: process.env.DB_NAME
 });
 
+// Ensure the addresses table exists even if setup.js hasn't been re-run.
+// Idempotent; safe to run on every boot.
+let addressesTableReady = null;
+function ensureAddressesTable() {
+  if (!addressesTableReady) {
+    addressesTableReady = db.query(`
+      CREATE TABLE IF NOT EXISTS addresses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        label VARCHAR(50) NOT NULL,
+        recipient VARCHAR(150) NOT NULL,
+        line1 VARCHAR(255) NOT NULL,
+        city VARCHAR(100) NOT NULL,
+        postal VARCHAR(20) DEFAULT NULL,
+        country VARCHAR(100) NOT NULL DEFAULT 'Türkiye',
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_addresses_user (user_id)
+      )
+    `).catch((err) => {
+      addressesTableReady = null;
+      throw err;
+    });
+  }
+  return addressesTableReady;
+}
+
 // test route
 app.get("/", (req, res) => {
   res.send("Server is running with MySQL");
@@ -167,6 +195,301 @@ app.put("/api/profile", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Profile update error:", error);
     res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
+// GET /api/profile/orders — return authenticated user's orders (matched by email)
+app.get("/api/profile/orders", requireAuth, async (req, res) => {
+  try {
+    const [orderRows] = await db.query(
+      `SELECT id, invoice_number, total_amount, currency, status, created_at
+       FROM orders
+       WHERE customer_email = ?
+       ORDER BY created_at DESC`,
+      [req.user.email]
+    );
+
+    if (orderRows.length === 0) {
+      return res.json([]);
+    }
+
+    const orderIds = orderRows.map((o) => o.id);
+    const [itemRows] = await db.query(
+      `SELECT order_id, product_id, product_name, size, quantity, unit_price, line_total
+       FROM order_items
+       WHERE order_id IN (?)
+       ORDER BY id`,
+      [orderIds]
+    );
+
+    const itemsByOrder = new Map();
+    for (const it of itemRows) {
+      if (!itemsByOrder.has(it.order_id)) itemsByOrder.set(it.order_id, []);
+      itemsByOrder.get(it.order_id).push({
+        id: it.product_id,
+        name: it.product_name,
+        size: it.size,
+        qty: it.quantity,
+        price: Number(it.unit_price),
+        lineTotal: Number(it.line_total),
+        image: null,
+      });
+    }
+
+    const payload = orderRows.map((o) => ({
+      id: o.invoice_number,
+      orderId: o.id,
+      placedAt: o.created_at,
+      status: String(o.status).replace(/_/g, '-'),
+      total: Number(o.total_amount),
+      currency: o.currency || 'TRY',
+      items: itemsByOrder.get(o.id) || [],
+    }));
+
+    res.json(payload);
+  } catch (error) {
+    console.error("Profile orders fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch orders" });
+  }
+});
+
+// ─── Profile Addresses ──────────────────────────────────
+
+function mapAddress(row) {
+  return {
+    id: row.id,
+    label: row.label,
+    recipient: row.recipient,
+    line1: row.line1,
+    city: row.city,
+    postal: row.postal || '',
+    country: row.country,
+    isDefault: !!row.is_default,
+  };
+}
+
+function validateAddressBody(body) {
+  const label = typeof body?.label === 'string' ? body.label.trim() : '';
+  const recipient = typeof body?.recipient === 'string' ? body.recipient.trim() : '';
+  const line1 = typeof body?.line1 === 'string' ? body.line1.trim() : '';
+  const city = typeof body?.city === 'string' ? body.city.trim() : '';
+  const postal = typeof body?.postal === 'string' ? body.postal.trim() : '';
+  const country = typeof body?.country === 'string' && body.country.trim()
+    ? body.country.trim()
+    : 'Türkiye';
+  const isDefault = body?.isDefault === true;
+
+  if (!label) return { error: 'Label is required' };
+  if (label.length > 50) return { error: 'Label must be 50 characters or fewer' };
+  if (!recipient) return { error: 'Recipient is required' };
+  if (recipient.length > 150) return { error: 'Recipient must be 150 characters or fewer' };
+  if (!line1) return { error: 'Street address is required' };
+  if (line1.length > 255) return { error: 'Street address must be 255 characters or fewer' };
+  if (!city) return { error: 'City is required' };
+  if (city.length > 100) return { error: 'City must be 100 characters or fewer' };
+  if (postal.length > 20) return { error: 'Postal code must be 20 characters or fewer' };
+  if (country.length > 100) return { error: 'Country must be 100 characters or fewer' };
+
+  return { data: { label, recipient, line1, city, postal, country, isDefault } };
+}
+
+// GET /api/profile/addresses — list authenticated user's addresses
+app.get("/api/profile/addresses", requireAuth, async (req, res) => {
+  try {
+    await ensureAddressesTable();
+    const [rows] = await db.query(
+      `SELECT id, label, recipient, line1, city, postal, country, is_default, created_at
+       FROM addresses
+       WHERE user_id = ?
+       ORDER BY is_default DESC, created_at ASC, id ASC`,
+      [req.user.id]
+    );
+    res.json(rows.map(mapAddress));
+  } catch (error) {
+    // If the table genuinely doesn't exist (e.g. setup failed), treat it as
+    // "no addresses yet" rather than a fetch error — the user hasn't created any.
+    if (error && error.code === 'ER_NO_SUCH_TABLE') {
+      return res.json([]);
+    }
+    console.error("Addresses fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch addresses" });
+  }
+});
+
+// POST /api/profile/addresses — create a new address for the authenticated user
+app.post("/api/profile/addresses", requireAuth, async (req, res) => {
+  const { data, error } = validateAddressBody(req.body);
+  if (error) return res.status(400).json({ message: error });
+
+  let conn;
+  try {
+    await ensureAddressesTable();
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const [existing] = await conn.query(
+      "SELECT COUNT(*) AS cnt FROM addresses WHERE user_id = ?",
+      [req.user.id]
+    );
+    const forceDefault = existing[0].cnt === 0;
+    const makeDefault = data.isDefault || forceDefault;
+
+    if (makeDefault) {
+      await conn.query(
+        "UPDATE addresses SET is_default = 0 WHERE user_id = ?",
+        [req.user.id]
+      );
+    }
+
+    const [result] = await conn.query(
+      `INSERT INTO addresses (user_id, label, recipient, line1, city, postal, country, is_default)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        data.label,
+        data.recipient,
+        data.line1,
+        data.city,
+        data.postal || null,
+        data.country,
+        makeDefault ? 1 : 0,
+      ]
+    );
+
+    await conn.commit();
+
+    const [rows] = await db.query(
+      `SELECT id, label, recipient, line1, city, postal, country, is_default
+       FROM addresses WHERE id = ?`,
+      [result.insertId]
+    );
+    res.status(201).json(mapAddress(rows[0]));
+  } catch (err) {
+    try { await conn?.rollback(); } catch (_) { /* ignore */ }
+    console.error("Address create error:", err);
+    res.status(500).json({ message: "Failed to create address" });
+  } finally {
+    conn?.release();
+  }
+});
+
+// PUT /api/profile/addresses/:id — update an address owned by the authenticated user
+app.put("/api/profile/addresses/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) {
+    return res.status(400).json({ message: "Invalid address id" });
+  }
+
+  const { data, error } = validateAddressBody(req.body);
+  if (error) return res.status(400).json({ message: error });
+
+  let conn;
+  try {
+    await ensureAddressesTable();
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const [owned] = await conn.query(
+      "SELECT id, is_default FROM addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id]
+    );
+    if (owned.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: "Address not found" });
+    }
+
+    const wasDefault = !!owned[0].is_default;
+    const makeDefault = data.isDefault || wasDefault;
+
+    if (makeDefault) {
+      await conn.query(
+        "UPDATE addresses SET is_default = 0 WHERE user_id = ?",
+        [req.user.id]
+      );
+    }
+
+    await conn.query(
+      `UPDATE addresses
+       SET label = ?, recipient = ?, line1 = ?, city = ?, postal = ?, country = ?, is_default = ?
+       WHERE id = ? AND user_id = ?`,
+      [
+        data.label,
+        data.recipient,
+        data.line1,
+        data.city,
+        data.postal || null,
+        data.country,
+        makeDefault ? 1 : 0,
+        id,
+        req.user.id,
+      ]
+    );
+
+    await conn.commit();
+
+    const [rows] = await db.query(
+      `SELECT id, label, recipient, line1, city, postal, country, is_default
+       FROM addresses WHERE id = ?`,
+      [id]
+    );
+    res.json(mapAddress(rows[0]));
+  } catch (err) {
+    try { await conn?.rollback(); } catch (_) { /* ignore */ }
+    console.error("Address update error:", err);
+    res.status(500).json({ message: "Failed to update address" });
+  } finally {
+    conn?.release();
+  }
+});
+
+// DELETE /api/profile/addresses/:id — remove an address owned by the authenticated user
+app.delete("/api/profile/addresses/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) {
+    return res.status(400).json({ message: "Invalid address id" });
+  }
+
+  let conn;
+  try {
+    await ensureAddressesTable();
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const [owned] = await conn.query(
+      "SELECT id, is_default FROM addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id]
+    );
+    if (owned.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: "Address not found" });
+    }
+
+    await conn.query(
+      "DELETE FROM addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id]
+    );
+
+    if (owned[0].is_default) {
+      const [next] = await conn.query(
+        "SELECT id FROM addresses WHERE user_id = ? ORDER BY created_at ASC, id ASC LIMIT 1",
+        [req.user.id]
+      );
+      if (next.length > 0) {
+        await conn.query(
+          "UPDATE addresses SET is_default = 1 WHERE id = ?",
+          [next[0].id]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({ message: "Address removed" });
+  } catch (err) {
+    try { await conn?.rollback(); } catch (_) { /* ignore */ }
+    console.error("Address delete error:", err);
+    res.status(500).json({ message: "Failed to delete address" });
+  } finally {
+    conn?.release();
   }
 });
 

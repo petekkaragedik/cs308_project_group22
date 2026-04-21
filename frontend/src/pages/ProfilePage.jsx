@@ -8,68 +8,21 @@ import {
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
-/* ─── Mock data (orders & addresses — backend'e bağlanınca kaldırılacak) ──── */
-
-const MOCK_ORDERS = [
-  {
-    id: 'SCY-2026-0418',
-    placedAt: '2026-04-18',
-    status: 'in-transit',
-    total: 1840,
-    items: [
-      { id: 1, name: 'Shell Crochet Top', qty: 1, price: 990, image: null },
-      { id: 2, name: 'Dune Bucket Hat', qty: 1, price: 850, image: null },
-    ],
-  },
-  {
-    id: 'SCY-2026-0411',
-    placedAt: '2026-04-11',
-    status: 'processing',
-    total: 620,
-    items: [{ id: 3, name: 'Tide Pool Bag', qty: 1, price: 620, image: null }],
-  },
-  {
-    id: 'SCY-2026-0322',
-    placedAt: '2026-03-22',
-    status: 'delivered',
-    total: 1450,
-    items: [
-      { id: 4, name: 'Seafoam Cardigan', qty: 1, price: 1450, image: null },
-    ],
-  },
-  {
-    id: 'SCY-2026-0215',
-    placedAt: '2026-02-15',
-    status: 'delivered',
-    total: 720,
-    items: [{ id: 5, name: 'Coral Scarf', qty: 2, price: 360, image: null }],
-  },
-];
-
-const MOCK_ADDRESSES = [
-  {
-    id: 1,
-    label: 'Home',
-    recipient: 'Beril Serbest',
-    line1: 'Orta Mah. Üniversite Cad. No:27',
-    city: 'Tuzla / İstanbul',
-    postal: '34956',
-    country: 'Türkiye',
-    isDefault: true,
-  },
-  {
-    id: 2,
-    label: 'Campus',
-    recipient: 'Beril Serbest',
-    line1: 'Sabancı Üniversitesi, Yurtlar',
-    city: 'Tuzla / İstanbul',
-    postal: '34956',
-    country: 'Türkiye',
-    isDefault: false,
-  },
-];
-
 /* ─── Helpers ──────────────────────────────────────── */
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function parseError(res, fallback) {
+  try {
+    const body = await res.json();
+    return body.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function formatPrice(price) {
   return '₺' + Number(price).toLocaleString('tr-TR', {
@@ -109,8 +62,6 @@ export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [orders] = useState(MOCK_ORDERS);
-  const [addresses, setAddresses] = useState(MOCK_ADDRESSES);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -224,15 +175,9 @@ export default function ProfilePage() {
             {tab === 'profile' && (
               <ProfileSection user={user} setUser={setUser} onSaved={() => showToast('Profile updated')} />
             )}
-            {tab === 'orders' && <OrdersSection orders={orders} />}
+            {tab === 'orders' && <OrdersSection />}
             {tab === 'security' && <SecuritySection email={user.email} onDone={showToast} />}
-            {tab === 'addresses' && (
-              <AddressesSection
-                addresses={addresses}
-                setAddresses={setAddresses}
-                onChanged={showToast}
-              />
-            )}
+            {tab === 'addresses' && <AddressesSection onChanged={showToast} />}
           </main>
         </div>
       </div>
@@ -449,8 +394,31 @@ function ProfileSection({ user, setUser, onSaved }) {
 
 /* ─── Orders section ───────────────────────────────── */
 
-function OrdersSection({ orders }) {
+function OrdersSection() {
   const [view, setView] = useState('active');
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/profile/orders', { headers: authHeaders() });
+      if (!res.ok) throw new Error(await parseError(res, 'Failed to load orders'));
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || 'Failed to load orders');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
   const active = orders.filter((o) => o.status !== 'delivered');
   const past = orders.filter((o) => o.status === 'delivered');
   const list = view === 'active' ? active : past;
@@ -459,27 +427,48 @@ function OrdersSection({ orders }) {
     <Card>
       <SectionHeader title="Your orders" subtitle="Track shipments and revisit past purchases." />
 
-      <div style={styles.pillRow}>
-        <Pill active={view === 'active'} onClick={() => setView('active')}>
-          Active <span style={styles.pillCount}>{active.length}</span>
-        </Pill>
-        <Pill active={view === 'past'} onClick={() => setView('past')}>
-          Past <span style={styles.pillCount}>{past.length}</span>
-        </Pill>
-      </div>
-
-      {list.length === 0 ? (
+      {loading ? (
         <EmptyMini
           icon={<Package size={32} strokeWidth={1.5} />}
-          heading={view === 'active' ? 'No active orders' : 'No past orders yet'}
-          body={view === 'active'
-            ? 'When you place an order, you\'ll be able to track it here.'
-            : 'Your delivered orders will appear here.'}
+          heading="Loading orders…"
+          body="Fetching your latest orders."
         />
-      ) : (
-        <div style={styles.orderList}>
-          {list.map((o) => <OrderCard key={o.id} order={o} />)}
+      ) : error ? (
+        <div>
+          <div style={styles.errorBox}>
+            <AlertCircle size={16} /> {error}
+          </div>
+          <div style={{ ...styles.footerActions, justifyContent: 'center', marginTop: 'var(--space-4)' }}>
+            <button className="pf-btn-ghost" style={styles.btnGhost} onClick={load}>
+              Try again
+            </button>
+          </div>
         </div>
+      ) : (
+        <>
+          <div style={styles.pillRow}>
+            <Pill active={view === 'active'} onClick={() => setView('active')}>
+              Active <span style={styles.pillCount}>{active.length}</span>
+            </Pill>
+            <Pill active={view === 'past'} onClick={() => setView('past')}>
+              Past <span style={styles.pillCount}>{past.length}</span>
+            </Pill>
+          </div>
+
+          {list.length === 0 ? (
+            <EmptyMini
+              icon={<Package size={32} strokeWidth={1.5} />}
+              heading={view === 'active' ? 'No active orders' : 'No past orders yet'}
+              body={view === 'active'
+                ? 'When you place an order, you\'ll be able to track it here.'
+                : 'Your delivered orders will appear here.'}
+            />
+          ) : (
+            <div style={styles.orderList}>
+              {list.map((o) => <OrderCard key={o.id} order={o} />)}
+            </div>
+          )}
+        </>
       )}
     </Card>
   );
@@ -740,24 +729,105 @@ function ChangePasswordModal({ email, onClose, onDone }) {
 
 /* ─── Addresses section ────────────────────────────── */
 
-function AddressesSection({ addresses, setAddresses, onChanged }) {
+function AddressesSection({ onChanged }) {
+  const [addresses, setAddresses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
-  function setDefault(id) {
-    setAddresses((list) => list.map((a) => ({ ...a, isDefault: a.id === id })));
-    onChanged?.('Default address updated');
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/profile/addresses', { headers: authHeaders() });
+      if (!res.ok) throw new Error(await parseError(res, 'Failed to load addresses'));
+      const data = await res.json();
+      setAddresses(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || 'Failed to load addresses');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function remove(id) {
-    setAddresses((list) => list.filter((a) => a.id !== id));
-    onChanged?.('Address removed');
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function setDefault(id) {
+    setActionError(null);
+    const current = addresses.find((a) => a.id === id);
+    if (!current) return;
+    try {
+      const res = await fetch(`/api/profile/addresses/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ ...current, isDefault: true }),
+      });
+      if (!res.ok) throw new Error(await parseError(res, 'Failed to update address'));
+      const updated = await res.json();
+      setAddresses((list) =>
+        list.map((a) =>
+          a.id === updated.id ? updated : { ...a, isDefault: false }
+        )
+      );
+      onChanged?.('Default address updated');
+    } catch (err) {
+      setActionError(err.message || 'Failed to update address');
+    }
   }
 
-  function save(addr) {
-    setAddresses((list) => {
-      if (addr.id) return list.map((a) => (a.id === addr.id ? addr : a));
-      return [...list, { ...addr, id: Date.now() }];
-    });
+  async function remove(id) {
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/profile/addresses/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(await parseError(res, 'Failed to remove address'));
+      await load();
+      onChanged?.('Address removed');
+    } catch (err) {
+      setActionError(err.message || 'Failed to remove address');
+    }
+  }
+
+  async function save(addr) {
+    const isEdit = Boolean(addr.id);
+    const res = await fetch(
+      isEdit ? `/api/profile/addresses/${addr.id}` : '/api/profile/addresses',
+      {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          label: addr.label,
+          recipient: addr.recipient,
+          line1: addr.line1,
+          city: addr.city,
+          postal: addr.postal,
+          country: addr.country,
+          isDefault: !!addr.isDefault,
+        }),
+      }
+    );
+    if (!res.ok) throw new Error(await parseError(res, 'Failed to save address'));
+    const saved = await res.json();
+    if (isEdit) {
+      setAddresses((list) => {
+        const next = list.map((a) => (a.id === saved.id ? saved : a));
+        return saved.isDefault
+          ? next.map((a) => (a.id === saved.id ? a : { ...a, isDefault: false }))
+          : next;
+      });
+    } else {
+      setAddresses((list) => {
+        const next = saved.isDefault
+          ? list.map((a) => ({ ...a, isDefault: false }))
+          : list;
+        return [...next, saved];
+      });
+    }
     setEditing(null);
     onChanged?.('Address saved');
   }
@@ -768,22 +838,56 @@ function AddressesSection({ addresses, setAddresses, onChanged }) {
         title="Addresses"
         subtitle="Where should we ship your orders?"
         action={
-          <button className="pf-btn-primary" style={styles.btnPrimary} onClick={() => setEditing({})}>
+          <button
+            className="pf-btn-primary"
+            style={styles.btnPrimary}
+            onClick={() => { setActionError(null); setEditing({}); }}
+            disabled={loading || !!error}
+          >
             <Plus size={16} /> ADD ADDRESS
           </button>
         }
       />
 
-      {addresses.length === 0 ? (
+      {actionError && (
+        <div style={{ ...styles.errorBox, marginBottom: 'var(--space-4)' }}>
+          <AlertCircle size={16} /> {actionError}
+        </div>
+      )}
+
+      {loading ? (
         <EmptyMini
           icon={<MapPin size={32} strokeWidth={1.5} />}
-          heading="No addresses yet"
-          body="Add a shipping address to speed up checkout."
+          heading="Loading addresses…"
+          body="Fetching your saved addresses."
+        />
+      ) : error ? (
+        <div>
+          <div style={styles.errorBox}>
+            <AlertCircle size={16} /> {error}
+          </div>
+          <div style={{ ...styles.footerActions, justifyContent: 'center', marginTop: 'var(--space-4)' }}>
+            <button className="pf-btn-ghost" style={styles.btnGhost} onClick={load}>
+              Try again
+            </button>
+          </div>
+        </div>
+      ) : addresses.length === 0 ? (
+        <EmptyMini
+          icon={<MapPin size={32} strokeWidth={1.5} />}
+          heading="You do not have any saved addresses yet."
+          body="Add your first address to continue."
         />
       ) : (
         <div style={styles.addressGrid}>
           {addresses.map((a) => (
-            <AddressCard key={a.id} address={a} onEdit={() => setEditing(a)} onDelete={() => remove(a.id)} onDefault={() => setDefault(a.id)} />
+            <AddressCard
+              key={a.id}
+              address={a}
+              onEdit={() => { setActionError(null); setEditing(a); }}
+              onDelete={() => remove(a.id)}
+              onDefault={() => setDefault(a.id)}
+            />
           ))}
         </div>
       )}
@@ -839,11 +943,25 @@ function AddressEditorModal({ initial, onClose, onSave }) {
     country: initial.country || 'Türkiye',
     isDefault: initial.isDefault || false,
   });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
 
   const valid = form.label && form.recipient && form.line1 && form.city;
 
+  async function submit() {
+    setErr(null);
+    setSaving(true);
+    try {
+      await onSave(form);
+    } catch (e) {
+      setErr(e?.message || 'Failed to save address');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Modal onClose={onClose} wide>
+    <Modal onClose={saving ? () => {} : onClose} wide>
       <h2 style={styles.modalTitle}>{initial.id ? 'Edit address' : 'Add address'}</h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
@@ -855,15 +973,25 @@ function AddressEditorModal({ initial, onClose, onSave }) {
         <Field label="Country" full><input className="pf-input" style={styles.input} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} /></Field>
       </div>
 
+      {err && (
+        <div style={{ ...styles.errorBox, marginTop: 'var(--space-4)' }}>
+          <AlertCircle size={16} /> {err}
+        </div>
+      )}
+
       <div style={styles.modalActions}>
-        <button className="pf-btn-ghost" style={styles.btnGhost} onClick={onClose}>Cancel</button>
+        <button className="pf-btn-ghost" style={styles.btnGhost} onClick={onClose} disabled={saving}>Cancel</button>
         <button
           className="pf-btn-primary"
-          style={{ ...styles.btnPrimary, opacity: valid ? 1 : 0.5, cursor: valid ? 'pointer' : 'not-allowed' }}
-          disabled={!valid}
-          onClick={() => onSave(form)}
+          style={{
+            ...styles.btnPrimary,
+            opacity: valid && !saving ? 1 : 0.5,
+            cursor: valid && !saving ? 'pointer' : 'not-allowed',
+          }}
+          disabled={!valid || saving}
+          onClick={submit}
         >
-          SAVE ADDRESS
+          {saving ? 'SAVING…' : 'SAVE ADDRESS'}
         </button>
       </div>
     </Modal>
