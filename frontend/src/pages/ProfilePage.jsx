@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Package, Lock, MapPin, LogOut, Camera, Trash2,
@@ -8,14 +8,7 @@ import {
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
-/* ─── Mock data (backend'e bağlanınca kaldırılacak) ──── */
-
-const MOCK_USER = {
-  fullName: 'Beril Serbest',
-  email: 'beril@sabanciuniv.edu',
-  phone: '+90 532 000 00 00',
-  avatar: null,
-};
+/* ─── Mock data (orders & addresses — backend'e bağlanınca kaldırılacak) ──── */
 
 const MOCK_ORDERS = [
   {
@@ -113,12 +106,48 @@ const STEP_LABELS = {
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('profile');
-  const [user, setUser] = useState(MOCK_USER);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [orders] = useState(MOCK_ORDERS);
   const [addresses, setAddresses] = useState(MOCK_ADDRESSES);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    fetch('/api/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/login');
+          throw new Error('auth');
+        }
+        if (!res.ok) throw new Error('fetch');
+        return res.json();
+      })
+      .then((data) => {
+        setUser({
+          fullName: data.name,
+          email: data.email,
+          phone: '',
+          avatar: null,
+        });
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.message !== 'auth') setLoadError('fetch');
+        setLoading(false);
+      });
+  }, [navigate]);
 
   function showToast(msg) {
     setToast(msg);
@@ -128,6 +157,20 @@ export default function ProfilePage() {
   function handleLogout() {
     localStorage.removeItem('token');
     navigate('/login');
+  }
+
+  if (loading || !user) {
+    return (
+      <>
+        <Navbar />
+        <div style={{ ...styles.page, textAlign: 'center' }}>
+          <p style={styles.subtitle}>
+            {loadError ? 'Failed to load profile. Please try again.' : 'Loading your profile…'}
+          </p>
+        </div>
+        <Footer />
+      </>
+    );
   }
 
   return (
@@ -239,6 +282,8 @@ function SidebarTab({ icon, label, active, onClick }) {
 function ProfileSection({ user, setUser, onSaved }) {
   const fileRef = useRef(null);
   const [form, setForm] = useState(user);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const dirty =
     form.fullName !== user.fullName ||
@@ -257,13 +302,47 @@ function ProfileSection({ user, setUser, onSaved }) {
     setForm((f) => ({ ...f, avatar: null }));
   }
 
-  function save() {
-    setUser(form);
-    onSaved?.();
+  async function save() {
+    setSaveError(null);
+    const trimmedName = form.fullName.trim();
+    if (!trimmedName) {
+      setSaveError('Name is required.');
+      return;
+    }
+
+    const nameChanged = trimmedName !== user.fullName;
+    setSaving(true);
+    try {
+      if (nameChanged) {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ name: trimmedName }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.message || 'Failed to update profile');
+        }
+        const data = await res.json();
+        setUser({ ...form, fullName: data.name, email: data.email });
+      } else {
+        setUser(form);
+      }
+      onSaved?.();
+    } catch (err) {
+      setSaveError(err.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function reset() {
     setForm(user);
+    setSaveError(null);
   }
 
   return (
@@ -336,17 +415,32 @@ function ProfileSection({ user, setUser, onSaved }) {
         </Field>
       </div>
 
+      {saveError && (
+        <div style={{ ...styles.errorBox, marginTop: 'var(--space-4)' }}>
+          <AlertCircle size={16} /> {saveError}
+        </div>
+      )}
+
       <div style={styles.footerActions}>
-        <button className="pf-btn-ghost" style={styles.btnGhost} disabled={!dirty} onClick={reset}>
+        <button
+          className="pf-btn-ghost"
+          style={styles.btnGhost}
+          disabled={!dirty || saving}
+          onClick={reset}
+        >
           Cancel
         </button>
         <button
           className="pf-btn-primary"
-          style={{ ...styles.btnPrimary, opacity: dirty ? 1 : 0.5, cursor: dirty ? 'pointer' : 'not-allowed' }}
-          disabled={!dirty}
+          style={{
+            ...styles.btnPrimary,
+            opacity: dirty && !saving ? 1 : 0.5,
+            cursor: dirty && !saving ? 'pointer' : 'not-allowed',
+          }}
+          disabled={!dirty || saving}
           onClick={save}
         >
-          SAVE CHANGES
+          {saving ? 'SAVING…' : 'SAVE CHANGES'}
         </button>
       </div>
     </Card>

@@ -122,6 +122,54 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// GET /api/profile — return authenticated user's profile
+app.get("/api/profile", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Profile fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+});
+
+// PUT /api/profile — update authenticated user's name
+app.put("/api/profile", requireAuth, async (req, res) => {
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Name is required" });
+  }
+  const trimmed = name.trim();
+  if (trimmed.length > 100) {
+    return res.status(400).json({ message: "Name must be 100 characters or fewer" });
+  }
+
+  try {
+    const [result] = await db.query(
+      "UPDATE users SET name = ? WHERE id = ?",
+      [trimmed, req.user.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const [rows] = await db.query(
+      "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
 app.get("/api/categories", async (_req, res) => {
   try {
     const [rows] = await db.query(
