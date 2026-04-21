@@ -4,6 +4,7 @@ import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Zo
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { apiUrl } from '../apiBase';
 
 /* ─── Color map ───────────────────────────────────────── */
 
@@ -173,7 +174,7 @@ export default function ProductDetailPage() {
 
     let fetchedProduct;
 
-    fetch(`/api/products/${id}`)
+    fetch(apiUrl(`/api/products/${id}`))
       .then((res) => {
         if (res.status === 404) throw Object.assign(new Error(), { code: 'not_found' });
         if (!res.ok) throw new Error();
@@ -182,7 +183,7 @@ export default function ProductDetailPage() {
       .then((p) => {
         fetchedProduct = p;
         setProduct(p);
-        return fetch('/api/products');
+        return fetch(apiUrl('/api/products'));
       })
       .then((res) => res.json())
       .then((all) => {

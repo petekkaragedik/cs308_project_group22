@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, Heart, ShoppingCart, User, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { apiUrl } from '../apiBase';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -17,7 +18,7 @@ export default function Navbar() {
   const [allProducts, setAllProducts] = useState([]);
 
   useEffect(() => {
-    fetch('/api/products')
+    fetch(apiUrl('/api/products'))
       .then((res) => res.json())
       .then((data) => setAllProducts(data))
       .catch(() => {});

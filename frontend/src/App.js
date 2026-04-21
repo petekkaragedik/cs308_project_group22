@@ -6,6 +6,8 @@ import LandingPage from './pages/LandingPage';
 import ProductListingPage from './pages/ProductListingPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import CartPage from './pages/CartPage';
+import CheckoutPage from './pages/CheckoutPage';
+import InvoicePage from './pages/InvoicePage';
 import WishlistPage from './pages/WishlistPage';
 import ProfilePage from './pages/ProfilePage';
 import { CartProvider } from './context/CartContext';
@@ -21,6 +23,8 @@ function App() {
             <Route path="/products" element={<ProductListingPage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/invoice/:orderId" element={<InvoicePage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/" element={<LandingPage />} />
