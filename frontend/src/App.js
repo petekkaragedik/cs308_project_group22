@@ -7,6 +7,8 @@ import ProductListingPage from './pages/ProductListingPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import CartPage from './pages/CartPage';
 import WishlistPage from './pages/WishlistPage';
+import ProfilePage from './pages/ProfilePage';
+import PasswordConfirmPage from './pages/PasswordConfirmPage';
 import { CartProvider } from './context/CartContext';
 
 function App() {
@@ -21,6 +23,8 @@ function App() {
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/password/confirm" element={<PasswordConfirmPage />} />
             <Route path="/" element={<LandingPage />} />
           </Routes>
         </div>

@@ -4,12 +4,14 @@ const cors = require("cors");
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const Product = require("./models/Product");
 
 const app = express();
 app.use(cors({ origin: "http://localhost:3000" }));
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 
 // db connection
 const db = mysql.createPool({
@@ -222,6 +224,351 @@ app.get("/api/products/:id", async (req, res) => {
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch product from database" });
+  }
+});
+
+// ─── Email (dev-safe) ──────────────────────────────────
+
+const mailer = (() => {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    return nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT) || 587,
+      secure: Number(SMTP_PORT) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  }
+  return {
+    sendMail: async (opts) => {
+      console.log('\n─── DEV EMAIL (no SMTP configured) ───');
+      console.log('To:     ', opts.to);
+      console.log('Subject:', opts.subject);
+      console.log(opts.text || opts.html);
+      console.log('──────────────────────────────────────\n');
+      return { messageId: 'dev-' + Date.now() };
+    },
+  };
+})();
+
+const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@scylla.local';
+
+// ─── Profile ───────────────────────────────────────────
+
+// GET /api/me — current user profile
+app.get("/api/me", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name, email, phone, avatar_url, role, created_at FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ message: "User not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET /api/me error:", err);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+});
+
+// PUT /api/me — update name + phone
+app.put("/api/me", requireAuth, async (req, res) => {
+  const { name, phone } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Name is required" });
+  }
+  if (phone && phone.length > 30) {
+    return res.status(400).json({ message: "Phone is too long" });
+  }
+  try {
+    await db.query(
+      "UPDATE users SET name = ?, phone = ? WHERE id = ?",
+      [name.trim(), phone ? phone.trim() : null, req.user.id]
+    );
+    const [rows] = await db.query(
+      "SELECT id, name, email, phone, avatar_url, role FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("PUT /api/me error:", err);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
+// POST /api/me/avatar — { dataUrl }
+app.post("/api/me/avatar", requireAuth, async (req, res) => {
+  const { dataUrl } = req.body;
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+    return res.status(400).json({ message: "Valid image data URL required" });
+  }
+  if (dataUrl.length > 7_500_000) {
+    return res.status(413).json({ message: "Image too large (max ~5MB)" });
+  }
+  try {
+    await db.query("UPDATE users SET avatar_url = ? WHERE id = ?", [dataUrl, req.user.id]);
+    res.json({ avatar_url: dataUrl });
+  } catch (err) {
+    console.error("POST /api/me/avatar error:", err);
+    res.status(500).json({ message: "Failed to upload avatar" });
+  }
+});
+
+// DELETE /api/me/avatar
+app.delete("/api/me/avatar", requireAuth, async (req, res) => {
+  try {
+    await db.query("UPDATE users SET avatar_url = NULL WHERE id = ?", [req.user.id]);
+    res.json({ avatar_url: null });
+  } catch (err) {
+    console.error("DELETE /api/me/avatar error:", err);
+    res.status(500).json({ message: "Failed to remove avatar" });
+  }
+});
+
+// ─── Password change with email confirmation ───────────
+
+// POST /api/me/password/request
+// Body: { currentPassword, newPassword }
+// Verifies current password, stores HASHED new password keyed by a random token,
+// emails the user a confirmation link. Change only takes effect when confirmed.
+app.post("/api/me/password/request", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: "Current and new password required" });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: "New password must be at least 8 characters" });
+  }
+  try {
+    const [rows] = await db.query("SELECT id, email, password FROM users WHERE id = ?", [req.user.id]);
+    if (rows.length === 0) return res.status(404).json({ message: "User not found" });
+    const user = rows[0];
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(401).json({ message: "Current password is incorrect" });
+
+    // Invalidate any previous pending tokens for this user
+    await db.query("DELETE FROM password_reset_tokens WHERE user_id = ? AND used = 0", [user.id]);
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const newHash = await bcrypt.hash(newPassword, 10);
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+    await db.query(
+      "INSERT INTO password_reset_tokens (token_hash, user_id, new_password_hash, expires_at) VALUES (?, ?, ?, ?)",
+      [tokenHash, user.id, newHash, expires]
+    );
+
+    const confirmUrl = `${APP_URL}/password/confirm?token=${rawToken}`;
+    await mailer.sendMail({
+      from: FROM_EMAIL,
+      to: user.email,
+      subject: "Confirm your Scylla password change",
+      text: `Hello,\n\nWe received a request to change your Scylla password.\n` +
+            `Click the link below within 15 minutes to confirm:\n\n${confirmUrl}\n\n` +
+            `If you didn't request this, you can safely ignore this email — your password will not change.`,
+    });
+
+    res.json({ message: "Confirmation email sent" });
+  } catch (err) {
+    console.error("password/request error:", err);
+    res.status(500).json({ message: "Failed to initiate password change" });
+  }
+});
+
+// POST /api/password/confirm — public (token carries the auth)
+// Body: { token }
+app.post("/api/password/confirm", async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ message: "Token required" });
+  }
+  try {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const [rows] = await db.query(
+      "SELECT user_id, new_password_hash, expires_at, used FROM password_reset_tokens WHERE token_hash = ?",
+      [tokenHash]
+    );
+    if (rows.length === 0) return res.status(400).json({ message: "Invalid token" });
+
+    const t = rows[0];
+    if (t.used) return res.status(400).json({ message: "Token already used" });
+    if (new Date(t.expires_at) < new Date()) {
+      return res.status(400).json({ message: "Token expired" });
+    }
+
+    await db.query("UPDATE users SET password = ? WHERE id = ?", [t.new_password_hash, t.user_id]);
+    await db.query("UPDATE password_reset_tokens SET used = 1 WHERE token_hash = ?", [tokenHash]);
+
+    res.json({ message: "Password updated" });
+  } catch (err) {
+    console.error("password/confirm error:", err);
+    res.status(500).json({ message: "Failed to confirm password change" });
+  }
+});
+
+// ─── Addresses ─────────────────────────────────────────
+
+app.get("/api/me/addresses", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC",
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("GET addresses error:", err);
+    res.status(500).json({ message: "Failed to fetch addresses" });
+  }
+});
+
+function validateAddress(body) {
+  const { label, recipient, line1, city } = body;
+  if (!label || !label.trim()) return "Label is required";
+  if (!recipient || !recipient.trim()) return "Recipient is required";
+  if (!line1 || !line1.trim()) return "Street address is required";
+  if (!city || !city.trim()) return "City is required";
+  return null;
+}
+
+app.post("/api/me/addresses", requireAuth, async (req, res) => {
+  const err = validateAddress(req.body);
+  if (err) return res.status(400).json({ message: err });
+  const { label, recipient, line1, city, postal, country, isDefault } = req.body;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (isDefault) {
+      await conn.query("UPDATE addresses SET is_default = 0 WHERE user_id = ?", [req.user.id]);
+    } else {
+      // If user has no addresses, first one becomes default
+      const [[c]] = await conn.query("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?", [req.user.id]);
+      if (c.n === 0) req.body.isDefault = true;
+    }
+    const [result] = await conn.query(
+      `INSERT INTO addresses (user_id, label, recipient, line1, city, postal, country, is_default)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, label.trim(), recipient.trim(), line1.trim(), city.trim(),
+       postal || null, country || 'Türkiye', req.body.isDefault ? 1 : 0]
+    );
+    await conn.commit();
+    const [rows] = await db.query("SELECT * FROM addresses WHERE id = ?", [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    await conn.rollback();
+    console.error("POST address error:", e);
+    res.status(500).json({ message: "Failed to add address" });
+  } finally {
+    conn.release();
+  }
+});
+
+app.put("/api/me/addresses/:id", requireAuth, async (req, res) => {
+  const err = validateAddress(req.body);
+  if (err) return res.status(400).json({ message: err });
+  const { label, recipient, line1, city, postal, country } = req.body;
+  try {
+    const [result] = await db.query(
+      `UPDATE addresses
+       SET label = ?, recipient = ?, line1 = ?, city = ?, postal = ?, country = ?
+       WHERE id = ? AND user_id = ?`,
+      [label.trim(), recipient.trim(), line1.trim(), city.trim(),
+       postal || null, country || 'Türkiye', req.params.id, req.user.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ message: "Address not found" });
+    const [rows] = await db.query("SELECT * FROM addresses WHERE id = ?", [req.params.id]);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error("PUT address error:", e);
+    res.status(500).json({ message: "Failed to update address" });
+  }
+});
+
+app.post("/api/me/addresses/:id/default", requireAuth, async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[addr]] = await conn.query(
+      "SELECT id FROM addresses WHERE id = ? AND user_id = ?",
+      [req.params.id, req.user.id]
+    );
+    if (!addr) {
+      await conn.rollback();
+      return res.status(404).json({ message: "Address not found" });
+    }
+    await conn.query("UPDATE addresses SET is_default = 0 WHERE user_id = ?", [req.user.id]);
+    await conn.query("UPDATE addresses SET is_default = 1 WHERE id = ?", [req.params.id]);
+    await conn.commit();
+    res.json({ message: "Default address updated" });
+  } catch (e) {
+    await conn.rollback();
+    console.error("default address error:", e);
+    res.status(500).json({ message: "Failed to set default address" });
+  } finally {
+    conn.release();
+  }
+});
+
+app.delete("/api/me/addresses/:id", requireAuth, async (req, res) => {
+  try {
+    const [[addr]] = await db.query(
+      "SELECT id, is_default FROM addresses WHERE id = ? AND user_id = ?",
+      [req.params.id, req.user.id]
+    );
+    if (!addr) return res.status(404).json({ message: "Address not found" });
+    if (addr.is_default) {
+      return res.status(400).json({ message: "Cannot delete the default address" });
+    }
+    await db.query("DELETE FROM addresses WHERE id = ?", [req.params.id]);
+    res.json({ message: "Address deleted" });
+  } catch (e) {
+    console.error("DELETE address error:", e);
+    res.status(500).json({ message: "Failed to delete address" });
+  }
+});
+
+// ─── Orders ────────────────────────────────────────────
+
+// GET /api/me/orders — returns all orders grouped with their items
+app.get("/api/me/orders", requireAuth, async (req, res) => {
+  try {
+    const [orders] = await db.query(
+      `SELECT id, order_number, status, total, placed_at
+       FROM orders WHERE user_id = ? ORDER BY placed_at DESC`,
+      [req.user.id]
+    );
+    if (orders.length === 0) return res.json([]);
+
+    const ids = orders.map(o => o.id);
+    const [items] = await db.query(
+      `SELECT order_id, id, product_id, product_name, product_image, quantity, price
+       FROM order_items WHERE order_id IN (?)`,
+      [ids]
+    );
+
+    const byOrder = items.reduce((acc, it) => {
+      (acc[it.order_id] = acc[it.order_id] || []).push({
+        id: it.id,
+        productId: it.product_id,
+        name: it.product_name,
+        image: it.product_image,
+        qty: it.quantity,
+        price: Number(it.price),
+      });
+      return acc;
+    }, {});
+
+    res.json(orders.map(o => ({
+      id: o.order_number,
+      placedAt: o.placed_at,
+      status: o.status,
+      total: Number(o.total),
+      items: byOrder[o.id] || [],
+    })));
+  } catch (err) {
+    console.error("GET orders error:", err);
+    res.status(500).json({ message: "Failed to fetch orders" });
   }
 });
 
