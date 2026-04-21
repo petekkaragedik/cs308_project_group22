@@ -50,6 +50,20 @@ function signToken(user) {
   );
 }
 
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  try {
+    const token = header.slice(7);
+    req.user = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
 // register
 app.post("/api/register", async (req, res) => {
   const { name, email, password } = req.body;
@@ -224,6 +238,89 @@ app.get("/api/products/:id", async (req, res) => {
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch product from database" });
+  }
+});
+
+// ─── Favorites ─────────────────────────────────────────
+
+// GET /api/favorites — return favorite products for the authenticated user
+app.get("/api/favorites", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT p.*, f.created_at AS favorited_at
+       FROM favorites f
+       JOIN products p ON p.id = f.product_id
+       WHERE f.user_id = ?
+       ORDER BY f.created_at DESC`,
+      [req.user.id]
+    );
+
+    const formatted = rows.map(product => ({
+      ...product,
+      images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error("Favorites query error:", error);
+    res.status(500).json({ message: "Failed to fetch favorites" });
+  }
+});
+
+// POST /api/favorites — add a product to the authenticated user's favorites
+app.post("/api/favorites", requireAuth, async (req, res) => {
+  const { product_id } = req.body;
+
+  if (product_id === undefined || product_id === null || product_id === "") {
+    return res.status(400).json({ message: "product_id is required" });
+  }
+
+  try {
+    const [productRows] = await db.query(
+      "SELECT id FROM products WHERE id = ?",
+      [product_id]
+    );
+    if (productRows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [result] = await db.query(
+      "INSERT IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)",
+      [req.user.id, String(product_id)]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(409).json({ message: "Product already in favorites" });
+    }
+
+    return res.status(201).json({
+      message: "Product added to favorites",
+      favorite: { user_id: req.user.id, product_id: String(product_id) }
+    });
+  } catch (error) {
+    console.error("Add favorite error:", error);
+    res.status(500).json({ message: "Failed to add favorite" });
+  }
+});
+
+// DELETE /api/favorites/:productId — remove a product from the authenticated user's favorites
+app.delete("/api/favorites/:productId", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+
+  try {
+    const [result] = await db.query(
+      "DELETE FROM favorites WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Favorite not found" });
+    }
+
+    res.json({ message: "Product removed from favorites" });
+  } catch (error) {
+    console.error("Remove favorite error:", error);
+    res.status(500).json({ message: "Failed to remove favorite" });
   }
 });
 
