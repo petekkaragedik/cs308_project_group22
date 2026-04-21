@@ -72,6 +72,8 @@ async function setup() {
     )
   `);
   console.log('Order items table ready');
+
+  await db.execute(`
     CREATE TABLE IF NOT EXISTS favorites (
       user_id INT NOT NULL,
       product_id VARCHAR(50) NOT NULL,
