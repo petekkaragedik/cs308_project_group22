@@ -10,6 +10,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import InvoicePage from './pages/InvoicePage';
 import WishlistPage from './pages/WishlistPage';
 import ProfilePage from './pages/ProfilePage';
+import AdminModerationPage from './pages/AdminModerationPage';
 import { CartProvider } from './context/CartContext';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
             <Route path="/invoice/:orderId" element={<InvoicePage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/admin/moderation" element={<AdminModerationPage />} />
             <Route path="/" element={<LandingPage />} />
           </Routes>
         </div>
