@@ -81,6 +81,15 @@ function requireAuth(req, res, next) {
   }
 }
 
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
+    next();
+  };
+}
+
 // register
 app.post("/api/register", async (req, res) => {
   const { name, email, password } = req.body;
@@ -763,6 +772,191 @@ app.delete("/api/cart/:id", (req, res) => {
 
   cartItems.splice(index, 1);
   res.json({ message: "Item removed" });
+});
+
+// ─── Ratings & Comments ────────────────────────────────
+
+// POST /api/products/:productId/ratings — submit or update a rating (1-5)
+app.post("/api/products/:productId/ratings", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+  const rating = Number(req.body?.rating);
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Rating must be an integer between 1 and 5" });
+  }
+
+  try {
+    const [productRows] = await db.query("SELECT id FROM products WHERE id = ?", [productId]);
+    if (productRows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    await db.query(
+      `INSERT INTO ratings (user_id, product_id, rating) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE rating = VALUES(rating)`,
+      [req.user.id, productId, rating]
+    );
+
+    const [rows] = await db.query(
+      "SELECT id, user_id, product_id, rating, created_at, updated_at FROM ratings WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId]
+    );
+    return res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error("Submit rating error:", error);
+    res.status(500).json({ message: "Failed to submit rating" });
+  }
+});
+
+// GET /api/products/:productId/ratings — public: average + count
+app.get("/api/products/:productId/ratings", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT AVG(rating) AS average, COUNT(*) AS count FROM ratings WHERE product_id = ?",
+      [req.params.productId]
+    );
+    const average = rows[0].average == null ? 0 : Number(rows[0].average);
+    return res.json({ average: Math.round(average * 100) / 100, count: Number(rows[0].count) });
+  } catch (error) {
+    console.error("Get ratings error:", error);
+    res.status(500).json({ message: "Failed to fetch ratings" });
+  }
+});
+
+// POST /api/products/:productId/comments — submit a comment (pending approval)
+app.post("/api/products/:productId/comments", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim()
+    : typeof req.body?.comment === 'string' ? req.body.comment.trim()
+    : '';
+
+  if (!body) {
+    return res.status(400).json({ message: "Comment body is required" });
+  }
+  if (body.length > 2000) {
+    return res.status(400).json({ message: "Comment is too long (max 2000 characters)" });
+  }
+
+  try {
+    const [productRows] = await db.query("SELECT id FROM products WHERE id = ?", [productId]);
+    if (productRows.length === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [result] = await db.query(
+      "INSERT INTO comments (user_id, product_id, body, status) VALUES (?, ?, ?, 'pending')",
+      [req.user.id, productId, body]
+    );
+
+    const [rows] = await db.query(
+      "SELECT id, user_id, product_id, body, status, created_at FROM comments WHERE id = ?",
+      [result.insertId]
+    );
+    return res.status(201).json({
+      message: "Comment submitted and awaiting approval",
+      comment: rows[0]
+    });
+  } catch (error) {
+    console.error("Submit comment error:", error);
+    res.status(500).json({ message: "Failed to submit comment" });
+  }
+});
+
+// GET /api/products/:productId/comments — public: only approved comments
+app.get("/api/products/:productId/comments", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT c.id, c.product_id, c.body, c.created_at, u.name AS user_name
+       FROM comments c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.product_id = ? AND c.status = 'approved'
+       ORDER BY c.created_at DESC`,
+      [req.params.productId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Get comments error:", error);
+    res.status(500).json({ message: "Failed to fetch comments" });
+  }
+});
+
+// ─── Comment Moderation (Product Manager only) ─────────
+
+// GET /api/admin/comments?status=pending — list comments for moderation
+app.get("/api/admin/comments", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const status = req.query.status;
+  const allowed = ['pending', 'approved', 'rejected'];
+  try {
+    let rows;
+    if (status && allowed.includes(status)) {
+      [rows] = await db.query(
+        `SELECT c.id, c.product_id, c.body, c.status, c.created_at, c.updated_at,
+                u.id AS user_id, u.name AS user_name, u.email AS user_email
+         FROM comments c JOIN users u ON u.id = c.user_id
+         WHERE c.status = ? ORDER BY c.created_at DESC`,
+        [status]
+      );
+    } else {
+      [rows] = await db.query(
+        `SELECT c.id, c.product_id, c.body, c.status, c.created_at, c.updated_at,
+                u.id AS user_id, u.name AS user_name, u.email AS user_email
+         FROM comments c JOIN users u ON u.id = c.user_id
+         ORDER BY c.created_at DESC`
+      );
+    }
+    res.json(rows);
+  } catch (error) {
+    console.error("Admin list comments error:", error);
+    res.status(500).json({ message: "Failed to fetch comments" });
+  }
+});
+
+// POST /api/admin/comments/:id/approve
+app.post("/api/admin/comments/:id/approve", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [result] = await db.query(
+      "UPDATE comments SET status = 'approved' WHERE id = ?",
+      [req.params.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+    res.json({ message: "Comment approved" });
+  } catch (error) {
+    console.error("Approve comment error:", error);
+    res.status(500).json({ message: "Failed to approve comment" });
+  }
+});
+
+// POST /api/admin/comments/:id/reject
+app.post("/api/admin/comments/:id/reject", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [result] = await db.query(
+      "UPDATE comments SET status = 'rejected' WHERE id = ?",
+      [req.params.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+    res.json({ message: "Comment rejected" });
+  } catch (error) {
+    console.error("Reject comment error:", error);
+    res.status(500).json({ message: "Failed to reject comment" });
+  }
+});
+
+// DELETE /api/admin/comments/:id
+app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [result] = await db.query("DELETE FROM comments WHERE id = ?", [req.params.id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+    res.json({ message: "Comment deleted" });
+  } catch (error) {
+    console.error("Delete comment error:", error);
+    res.status(500).json({ message: "Failed to delete comment" });
+  }
 });
 
 app.use("/api/orders", createOrderRoutes(db));
