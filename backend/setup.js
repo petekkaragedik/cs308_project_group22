@@ -102,6 +102,37 @@ async function setup() {
   `);
   console.log('Addresses table ready');
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ratings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      product_id VARCHAR(64) NOT NULL,
+      rating TINYINT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_user_product (user_id, product_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_ratings_product (product_id)
+    )
+  `);
+  console.log('Ratings table ready');
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      product_id VARCHAR(64) NOT NULL,
+      body TEXT NOT NULL,
+      status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_comments_product (product_id),
+      INDEX idx_comments_status (status)
+    )
+  `);
+  console.log('Comments table ready');
+
   await db.end();
 }
 
