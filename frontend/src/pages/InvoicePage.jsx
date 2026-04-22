@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
+import { Clock, Truck, CheckCircle2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { apiUrl } from '../apiBase';
@@ -11,6 +12,79 @@ function formatMoney(n) {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
+  );
+}
+
+const TIMELINE_STEPS = [
+  { key: 'processing', label: 'Processing', Icon: Clock },
+  { key: 'in_transit', label: 'In transit', Icon: Truck },
+  { key: 'delivered', label: 'Delivered', Icon: CheckCircle2 },
+];
+
+function normalizeStatus(status) {
+  return String(status || '').toLowerCase().replace(/-/g, '_');
+}
+
+function DeliveryTimeline({ status }) {
+  const normalized = normalizeStatus(status);
+  if (normalized === 'cancelled') {
+    return (
+      <div style={styles.timelineCancelled}>
+        <p style={styles.sectionLabel}>Delivery status</p>
+        <p style={styles.bodyText}>Order cancelled.</p>
+      </div>
+    );
+  }
+  const currentIdx = Math.max(
+    0,
+    TIMELINE_STEPS.findIndex((s) => s.key === normalized)
+  );
+
+  return (
+    <div style={styles.timelineWrap}>
+      <p style={styles.sectionLabel}>Delivery status</p>
+      <div style={styles.timeline}>
+        {TIMELINE_STEPS.map((step, i) => {
+          const done = i <= currentIdx;
+          const isCurrent = i === currentIdx;
+          const Icon = step.Icon;
+          return (
+            <div key={step.key} style={styles.timelineStep}>
+              <div
+                style={{
+                  ...styles.timelineDot,
+                  backgroundColor: done ? 'var(--color-yellow)' : 'var(--color-white)',
+                  borderColor: done ? 'var(--color-charcoal)' : 'var(--color-border)',
+                }}
+              >
+                <Icon
+                  size={16}
+                  color={done ? 'var(--color-black)' : 'var(--color-charcoal-light)'}
+                />
+              </div>
+              <span
+                style={{
+                  ...styles.timelineLabel,
+                  color: isCurrent ? 'var(--color-black)' : 'var(--color-charcoal-light)',
+                  fontWeight: isCurrent ? 600 : 400,
+                }}
+              >
+                {step.label}
+              </span>
+              {i < TIMELINE_STEPS.length - 1 && (
+                <div
+                  style={{
+                    ...styles.timelineLine,
+                    backgroundColor:
+                      i < currentIdx ? 'var(--color-charcoal)' : 'var(--color-border)',
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -97,9 +171,6 @@ export default function InvoicePage() {
                       ? new Date(data.createdAt).toLocaleString('tr-TR')
                       : ''}
                   </p>
-                  <p style={styles.status}>
-                    Order status: <strong>{String(data.status).replace(/_/g, ' ')}</strong>
-                  </p>
                 </div>
                 <div style={styles.actions}>
                   <a href={pdfHref} download style={styles.downloadBtn}>
@@ -107,6 +178,8 @@ export default function InvoicePage() {
                   </a>
                 </div>
               </div>
+
+              <DeliveryTimeline status={data.status} />
 
               <div style={styles.billBlock}>
                 <p style={styles.sectionLabel}>Bill to</p>
@@ -203,14 +276,56 @@ const styles = {
     color: 'var(--color-black)',
     marginBottom: 'var(--space-2)',
   },
-  status: {
-    fontSize: 'var(--text-sm)',
-    color: 'var(--color-charcoal)',
-    fontFamily: 'var(--font-body)',
-    marginTop: 'var(--space-2)',
-  },
   actions: {
     flexShrink: 0,
+  },
+  timelineWrap: {
+    marginBottom: 'var(--space-6)',
+    paddingBottom: 'var(--space-6)',
+    borderBottom: '1px solid var(--color-border)',
+  },
+  timelineCancelled: {
+    marginBottom: 'var(--space-6)',
+    paddingBottom: 'var(--space-6)',
+    borderBottom: '1px solid var(--color-border)',
+  },
+  timeline: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    marginTop: 'var(--space-3)',
+    position: 'relative',
+  },
+  timelineStep: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    position: 'relative',
+    gap: 'var(--space-2)',
+  },
+  timelineDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 'var(--radius-full)',
+    border: '2px solid',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  timelineLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+  },
+  timelineLine: {
+    position: 'absolute',
+    top: 17,
+    left: '50%',
+    right: '-50%',
+    height: 2,
+    zIndex: 0,
   },
   downloadBtn: {
     display: 'inline-block',
