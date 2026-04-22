@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Mail, Lock } from 'lucide-react';
 import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
+function getPostLoginTarget(search) {
+  const raw = new URLSearchParams(search).get('next');
+  if (raw && /^\/[^/]/.test(raw)) return raw;
+  return '/products';
+}
+
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const location = useLocation();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -21,7 +28,7 @@ function Login() {
       .then(data => {
         if (data.token) {
           localStorage.setItem("token", data.token);
-          window.location.href = "/products";
+          window.location.href = getPostLoginTarget(location.search);
         } else {
           alert("Invalid credentials");
         }
