@@ -64,22 +64,16 @@ function sortSizes(arr) {
   });
 }
 
-/* ─── Hardcoded placeholder reviews ──────────────────── */
-
-const PLACEHOLDER_REVIEWS = [
-  {
-    name: 'Ayşe K.',
-    rating: 5,
-    date: 'March 15, 2026',
-    comment: 'Absolutely stunning quality! The crochet work is intricate and the fabric feels luxurious. Received so many compliments at the beach.',
-  },
-  {
-    name: 'Sofia M.',
-    rating: 4,
-    date: 'February 28, 2026',
-    comment: 'Beautiful piece, true to size. The color is exactly as shown in the photos. Shipping was fast too. Would definitely order again!',
-  },
-];
+function formatReviewDate(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+  } catch {
+    return String(value);
+  }
+}
 
 /* ─── Toast ───────────────────────────────────────────── */
 
@@ -357,6 +351,36 @@ export default function ProductDetailPage() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewHover, setReviewHover] = useState(0);
   const [reviewText, setReviewText] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  /* ── Ratings + approved comments ── */
+  const [ratingStats, setRatingStats] = useState({ average: 0, count: 0 });
+  const [approvedReviews, setApprovedReviews] = useState([]);
+
+  const loadReviews = useCallback(async () => {
+    if (!id) return;
+    try {
+      const [ratingsRes, commentsRes] = await Promise.all([
+        fetch(apiUrl(`/api/products/${id}/ratings`)),
+        fetch(apiUrl(`/api/products/${id}/comments`)),
+      ]);
+      if (ratingsRes.ok) {
+        const data = await ratingsRes.json();
+        setRatingStats({
+          average: Number(data.average) || 0,
+          count: Number(data.count) || 0,
+        });
+      }
+      if (commentsRes.ok) {
+        const data = await commentsRes.json();
+        setApprovedReviews(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      /* keep defaults on error */
+    }
+  }, [id]);
+
+  useEffect(() => { loadReviews(); }, [loadReviews]);
 
   function addToast(message) {
     const tid = Date.now();
@@ -372,10 +396,62 @@ export default function ProductDetailPage() {
     setTimeout(() => setCartAdded(false), 1500);
   }
 
-  function handleSubmitReview() {
-    addToast('Review submitted for approval!');
-    setReviewRating(0);
-    setReviewText('');
+  async function handleSubmitReview() {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate(`/login?next=/products/${id}`);
+      return;
+    }
+    const trimmedText = reviewText.trim();
+    if (!reviewRating && !trimmedText) {
+      addToast('Please pick a rating or write a comment.');
+      return;
+    }
+    setReviewSubmitting(true);
+    const authHeader = { Authorization: `Bearer ${token}` };
+    try {
+      let ratingOk = true;
+      let commentOk = true;
+
+      if (reviewRating) {
+        const r = await fetch(apiUrl(`/api/products/${id}/ratings`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify({ rating: reviewRating }),
+        });
+        ratingOk = r.ok;
+      }
+
+      if (trimmedText) {
+        const c = await fetch(apiUrl(`/api/products/${id}/comments`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify({ body: trimmedText }),
+        });
+        commentOk = c.ok;
+      }
+
+      if (!ratingOk && !commentOk) {
+        addToast('Submission failed. Please try again.');
+        return;
+      }
+
+      if (reviewRating && trimmedText) {
+        addToast('Rating saved. Comment submitted for approval.');
+      } else if (reviewRating) {
+        addToast('Thanks for your rating!');
+      } else {
+        addToast('Review submitted for approval!');
+      }
+
+      setReviewRating(0);
+      setReviewText('');
+      await loadReviews();
+    } catch {
+      addToast('Submission failed. Please try again.');
+    } finally {
+      setReviewSubmitting(false);
+    }
   }
 
   /* ── Loading / error / not-found ── */
@@ -684,24 +760,37 @@ export default function ProductDetailPage() {
           <h2 style={styles.reviewsTitle}>Reviews</h2>
 
           {/* Average rating summary */}
-          <div style={styles.ratingsummary}>
-            <StarRow rating={5} size={20} />
-            <span style={styles.ratingValue}>4.5 / 5</span>
-            <span style={styles.ratingCount}>12 reviews</span>
-          </div>
+          {ratingStats.count > 0 ? (
+            <div style={styles.ratingsummary}>
+              <StarRow rating={Math.round(ratingStats.average)} size={20} />
+              <span style={styles.ratingValue}>
+                {ratingStats.average.toFixed(1)} / 5
+              </span>
+              <span style={styles.ratingCount}>
+                {ratingStats.count} {ratingStats.count === 1 ? 'rating' : 'ratings'}
+              </span>
+            </div>
+          ) : (
+            <div style={styles.ratingsummary}>
+              <span style={styles.ratingCount}>No ratings yet</span>
+            </div>
+          )}
 
-          {/* Placeholder review cards */}
+          {/* Approved review cards */}
           <div style={styles.reviewList}>
-            {PLACEHOLDER_REVIEWS.map((r) => (
-              <div key={r.name} style={styles.reviewCard}>
-                <div style={styles.reviewHeader}>
-                  <span style={styles.reviewerName}>{r.name}</span>
-                  <StarRow rating={r.rating} size={14} />
-                  <span style={styles.reviewDate}>{r.date}</span>
+            {approvedReviews.length === 0 ? (
+              <p style={styles.ratingCount}>No reviews yet. Be the first to share your thoughts.</p>
+            ) : (
+              approvedReviews.map((r) => (
+                <div key={r.id} style={styles.reviewCard}>
+                  <div style={styles.reviewHeader}>
+                    <span style={styles.reviewerName}>{r.user_name || 'Customer'}</span>
+                    <span style={styles.reviewDate}>{formatReviewDate(r.created_at)}</span>
+                  </div>
+                  <p style={styles.reviewComment}>{r.body}</p>
                 </div>
-                <p style={styles.reviewComment}>{r.comment}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           {/* Leave a review form */}
@@ -738,9 +827,14 @@ export default function ProductDetailPage() {
 
             <button
               onClick={handleSubmitReview}
-              style={styles.submitReviewBtn}
+              disabled={reviewSubmitting}
+              style={{
+                ...styles.submitReviewBtn,
+                opacity: reviewSubmitting ? 0.6 : 1,
+                cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
+              }}
             >
-              SUBMIT REVIEW
+              {reviewSubmitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
             </button>
             <p style={styles.reviewNotice}>
               Your review will be visible after approval by our team
