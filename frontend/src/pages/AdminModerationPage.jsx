@@ -36,6 +36,7 @@ export default function AdminModerationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -55,6 +56,20 @@ export default function AdminModerationPage() {
       .catch(() => setAuthState('unauthorized'));
   }, [navigate]);
 
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/admin/comments?status=pending'), {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingCount(Array.isArray(data) ? data.length : 0);
+      }
+    } catch {
+      /* leave count as-is */
+    }
+  }, []);
+
   const loadComments = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -65,14 +80,17 @@ export default function AdminModerationPage() {
       const res = await fetch(url, { headers: authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setComments(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setComments(list);
+      if (status === 'pending') setPendingCount(list.length);
+      else refreshPendingCount();
     } catch (e) {
       setError('Could not load comments. Please try again.');
       setComments([]);
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, refreshPendingCount]);
 
   useEffect(() => {
     if (authState === 'authorized') loadComments();
@@ -153,6 +171,9 @@ export default function AdminModerationPage() {
               onClick={() => setStatus(t.key)}
             >
               {t.label}
+              {t.key === 'pending' && pendingCount > 0 && (
+                <span style={styles.pendingBadge}>{pendingCount}</span>
+              )}
             </button>
           ))}
         </div>
@@ -268,6 +289,9 @@ const styles = {
     flexWrap: 'wrap',
   },
   tab: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
     border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     padding: 'var(--space-2) var(--space-4)',
@@ -280,6 +304,20 @@ const styles = {
     textTransform: 'uppercase',
     cursor: 'pointer',
     transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+  pendingBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 20,
+    height: 20,
+    padding: '0 6px',
+    borderRadius: 'var(--radius-full)',
+    backgroundColor: 'var(--color-warning)',
+    color: 'var(--color-black)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-bold)',
+    letterSpacing: 'var(--tracking-normal)',
   },
   list: {
     display: 'flex',
