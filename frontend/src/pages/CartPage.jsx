@@ -1,20 +1,27 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
-import mockProducts from '../data/mockProducts';
 
 function formatPrice(price) {
   return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function getProduct(productId) {
-  return mockProducts.find((p) => p.id === productId) ?? null;
-}
-
 export default function CartPage() {
   const { cartItems, removeItem, updateItem } = useCart();
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((data) => setProducts(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  // eslint-disable-next-line eqeqeq
+  function getProduct(id) { return products.find((p) => p.id == id) ?? null; }
 
   const total = cartItems.reduce((sum, item) => {
     const p = getProduct(item.product_id);
