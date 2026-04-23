@@ -959,7 +959,7 @@ app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'
   }
 });
 
-app.use("/api/orders", createOrderRoutes(db));
+app.use("/api/orders", createOrderRoutes(db, requireAuth));
 
 if (require.main === module) {
   app.listen(3001, () => {
