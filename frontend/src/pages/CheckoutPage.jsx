@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, UserX, Plus, AlertCircle } from 'lucide-react';
+import { Plus, AlertCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
@@ -24,14 +24,18 @@ function authHeaders() {
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { cartItems, clearCart } = useCart();
-  const hasToken =
-    typeof window !== 'undefined' && !!localStorage.getItem('token');
-
   const [products, setProducts] = useState([]);
-  const [step, setStep] = useState(hasToken ? 'auth' : 'entry');
+  const [step, setStep] = useState('auth');
   const [orderData, setOrderData] = useState(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!localStorage.getItem('token')) {
+      navigate('/login?next=/checkout', { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     fetch(apiUrl('/api/products'))
@@ -62,9 +66,8 @@ export default function CheckoutPage() {
     try {
       const res = await fetch(apiUrl('/api/orders/mock-checkout'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
-          customerEmail: email,
           customerName: name || undefined,
           shippingAddress,
           items: cartItems.map((i) => ({
@@ -122,34 +125,13 @@ export default function CheckoutPage() {
         ) : (
           <div style={styles.layout}>
             <div style={styles.leftCol}>
-              {step === 'entry' && (
-                <EntryPanel
-                  onLogin={() => navigate('/login?next=/checkout')}
-                  onGuest={() => setStep('guest')}
-                />
-              )}
               {step === 'auth' && (
                 <AuthPanel
                   onNext={(data) => {
-                    setOrderData({ ...data, _from: 'auth' });
+                    setOrderData(data);
                     setStep('payment');
                   }}
-                  onSwitch={() => {
-                    setError(null);
-                    setStep('entry');
-                  }}
-                />
-              )}
-              {step === 'guest' && (
-                <GuestPanel
-                  onBack={() => {
-                    setError(null);
-                    setStep('entry');
-                  }}
-                  onNext={(data) => {
-                    setOrderData({ ...data, _from: 'guest' });
-                    setStep('payment');
-                  }}
+                  onSwitch={() => navigate('/login')}
                 />
               )}
               {step === 'payment' && orderData && (
@@ -159,7 +141,7 @@ export default function CheckoutPage() {
                   onApproved={() => placeOrder(orderData)}
                   onBack={() => {
                     setError(null);
-                    setStep(orderData._from);
+                    setStep('auth');
                   }}
                 />
               )}
@@ -175,38 +157,6 @@ export default function CheckoutPage() {
 }
 
 /* ─── Step panels ─────────────────────────────────── */
-
-function EntryPanel({ onLogin, onGuest }) {
-  return (
-    <div style={styles.formCard}>
-      <h2 style={styles.cardTitle}>How would you like to continue?</h2>
-      <p style={styles.lead}>
-        Sign in to use your saved addresses, or check out as a guest.
-      </p>
-      <div style={styles.choiceList}>
-        <button type="button" style={styles.choiceBtn} onClick={onLogin}>
-          <User size={22} />
-          <div style={styles.choiceTextWrap}>
-            <p style={styles.choiceTitle}>Log in</p>
-            <p style={styles.choiceDesc}>Use your account and saved addresses.</p>
-          </div>
-        </button>
-        <button type="button" style={styles.choiceBtnAlt} onClick={onGuest}>
-          <UserX size={22} />
-          <div style={styles.choiceTextWrap}>
-            <p style={styles.choiceTitle}>Continue as guest</p>
-            <p style={styles.choiceDesc}>
-              No account needed — just your shipping details.
-            </p>
-          </div>
-        </button>
-      </div>
-      <Link to="/cart" style={styles.backLink}>
-        ← Back to cart
-      </Link>
-    </div>
-  );
-}
 
 function AuthPanel({ onNext, onSwitch }) {
   const [profile, setProfile] = useState(null);
@@ -434,143 +384,6 @@ function AuthPanel({ onNext, onSwitch }) {
       </button>
       <button type="button" style={styles.linkBtnGhost} onClick={onSwitch}>
         Check out differently
-      </button>
-    </form>
-  );
-}
-
-function GuestPanel({ onBack, onNext }) {
-  const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    line1: '',
-    city: '',
-    postal: '',
-    country: 'Türkiye',
-  });
-
-  const valid =
-    form.firstName.trim() &&
-    form.lastName.trim() &&
-    form.email.trim() &&
-    form.line1.trim() &&
-    form.city.trim() &&
-    form.country.trim();
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (!valid) return;
-    const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-    onNext({
-      email: form.email.trim(),
-      name: fullName,
-      shippingAddress: {
-        recipient: fullName,
-        line1: form.line1.trim(),
-        city: form.city.trim(),
-        postal: form.postal.trim(),
-        country: form.country.trim(),
-      },
-    });
-  }
-
-  return (
-    <form style={styles.formCard} onSubmit={handleSubmit}>
-      <h2 style={styles.cardTitle}>Guest checkout</h2>
-
-      <div style={styles.rowGrid}>
-        <label style={styles.label}>
-          First name <span style={styles.req}>*</span>
-          <input
-            style={styles.input}
-            autoComplete="given-name"
-            value={form.firstName}
-            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-            required
-          />
-        </label>
-        <label style={styles.label}>
-          Last name <span style={styles.req}>*</span>
-          <input
-            style={styles.input}
-            autoComplete="family-name"
-            value={form.lastName}
-            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-            required
-          />
-        </label>
-      </div>
-
-      <label style={styles.label}>
-        Email <span style={styles.req}>*</span>
-        <input
-          type="email"
-          autoComplete="email"
-          style={styles.input}
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          placeholder="you@example.com"
-          required
-        />
-      </label>
-
-      <p style={styles.sectionLabel}>Shipping address</p>
-      <label style={styles.label}>
-        Street address <span style={styles.req}>*</span>
-        <input
-          style={styles.input}
-          autoComplete="street-address"
-          value={form.line1}
-          onChange={(e) => setForm({ ...form, line1: e.target.value })}
-          required
-        />
-      </label>
-      <div style={styles.rowGrid}>
-        <label style={styles.label}>
-          City <span style={styles.req}>*</span>
-          <input
-            style={styles.input}
-            autoComplete="address-level2"
-            value={form.city}
-            onChange={(e) => setForm({ ...form, city: e.target.value })}
-            required
-          />
-        </label>
-        <label style={styles.label}>
-          Postal code
-          <input
-            style={styles.input}
-            autoComplete="postal-code"
-            value={form.postal}
-            onChange={(e) => setForm({ ...form, postal: e.target.value })}
-          />
-        </label>
-      </div>
-      <label style={styles.label}>
-        Country <span style={styles.req}>*</span>
-        <input
-          style={styles.input}
-          autoComplete="country-name"
-          value={form.country}
-          onChange={(e) => setForm({ ...form, country: e.target.value })}
-          required
-        />
-      </label>
-
-      <button
-        type="submit"
-        style={{
-          ...styles.payBtn,
-          opacity: !valid ? 0.5 : 1,
-          cursor: !valid ? 'not-allowed' : 'pointer',
-        }}
-        disabled={!valid}
-      >
-        Continue to Payment
-      </button>
-      <button type="button" style={styles.linkBtnGhost} onClick={onBack}>
-        ← Back to options
       </button>
     </form>
   );
@@ -843,53 +656,6 @@ const styles = {
     fontWeight: 'var(--weight-regular)',
     color: 'var(--color-black)',
     marginBottom: 'var(--space-4)',
-  },
-
-  /* Entry step */
-  choiceList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-3)',
-    marginBottom: 'var(--space-4)',
-  },
-  choiceBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-4)',
-    padding: 'var(--space-4) var(--space-5)',
-    backgroundColor: 'var(--color-yellow)',
-    color: 'var(--color-black)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
-    fontFamily: 'var(--font-body)',
-    textAlign: 'left',
-  },
-  choiceBtnAlt: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-4)',
-    padding: 'var(--space-4) var(--space-5)',
-    backgroundColor: 'var(--color-sand)',
-    color: 'var(--color-black)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
-    fontFamily: 'var(--font-body)',
-    textAlign: 'left',
-  },
-  choiceTextWrap: { display: 'flex', flexDirection: 'column', gap: 2 },
-  choiceTitle: {
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-base)',
-    fontWeight: 'var(--weight-semibold)',
-  },
-  choiceDesc: {
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-xs)',
-    color: 'var(--color-charcoal)',
   },
 
   /* Auth step */

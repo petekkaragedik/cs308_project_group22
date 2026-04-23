@@ -42,19 +42,17 @@ function buildPayloadFromRows(orderRow, itemRows) {
   };
 }
 
-module.exports = function createOrderRoutes(db) {
+module.exports = function createOrderRoutes(db, requireAuth) {
   const router = express.Router();
 
   /**
    * Mock payment success: creates order, decreases stock, builds PDF, emails customer.
-   * Body: { customerEmail, customerName?, items: [{ product_id, size, quantity }] }
+   * Requires authentication. Body: { customerName?, items: [{ product_id, size, quantity }] }
    */
-  router.post('/mock-checkout', async (req, res) => {
-    const { customerEmail, customerName, items } = req.body;
+  router.post('/mock-checkout', requireAuth, async (req, res) => {
+    const { customerName, items } = req.body;
+    const customerEmail = req.user.email;
 
-    if (!customerEmail || !EMAIL_REGEX.test(String(customerEmail).trim())) {
-      return res.status(400).json({ message: 'Valid customer email is required' });
-    }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'Cart must contain at least one item' });
     }
