@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, UserX, Plus, AlertCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
-import mockProducts from '../data/mockProducts';
 import { apiUrl } from '../apiBase';
 
 function formatPrice(price) {
@@ -15,10 +14,6 @@ function formatPrice(price) {
       maximumFractionDigits: 2,
     })
   );
-}
-
-function getProduct(productId) {
-  return mockProducts.find((p) => p.id === productId) ?? null;
 }
 
 function authHeaders() {
@@ -32,9 +27,21 @@ export default function CheckoutPage() {
   const hasToken =
     typeof window !== 'undefined' && !!localStorage.getItem('token');
 
+  const [products, setProducts] = useState([]);
   const [step, setStep] = useState(hasToken ? 'auth' : 'entry');
+  const [orderData, setOrderData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetch(apiUrl('/api/products'))
+      .then((r) => r.json())
+      .then((data) => setProducts(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  // eslint-disable-next-line eqeqeq
+  const getProduct = useCallback((id) => products.find((p) => p.id == id) ?? null, [products]);
 
   const total = useMemo(
     () =>
@@ -42,7 +49,7 @@ export default function CheckoutPage() {
         const p = getProduct(item.product_id);
         return sum + (p ? p.price * item.quantity : 0);
       }, 0),
-    [cartItems]
+    [cartItems, getProduct]
   );
 
   async function placeOrder({ email, name, shippingAddress }) {
@@ -123,9 +130,10 @@ export default function CheckoutPage() {
               )}
               {step === 'auth' && (
                 <AuthPanel
-                  submitting={submitting}
-                  error={error}
-                  onSubmit={placeOrder}
+                  onNext={(data) => {
+                    setOrderData({ ...data, _from: 'auth' });
+                    setStep('payment');
+                  }}
                   onSwitch={() => {
                     setError(null);
                     setStep('entry');
@@ -134,18 +142,30 @@ export default function CheckoutPage() {
               )}
               {step === 'guest' && (
                 <GuestPanel
-                  submitting={submitting}
-                  error={error}
                   onBack={() => {
                     setError(null);
                     setStep('entry');
                   }}
-                  onSubmit={placeOrder}
+                  onNext={(data) => {
+                    setOrderData({ ...data, _from: 'guest' });
+                    setStep('payment');
+                  }}
+                />
+              )}
+              {step === 'payment' && orderData && (
+                <PaymentForm
+                  submitting={submitting}
+                  error={error}
+                  onApproved={() => placeOrder(orderData)}
+                  onBack={() => {
+                    setError(null);
+                    setStep(orderData._from);
+                  }}
                 />
               )}
             </div>
 
-            <OrderSummary cartItems={cartItems} total={total} />
+            <OrderSummary cartItems={cartItems} total={total} getProduct={getProduct} />
           </div>
         )}
       </div>
@@ -188,7 +208,7 @@ function EntryPanel({ onLogin, onGuest }) {
   );
 }
 
-function AuthPanel({ submitting, error, onSubmit, onSwitch }) {
+function AuthPanel({ onNext, onSwitch }) {
   const [profile, setProfile] = useState(null);
   const [addresses, setAddresses] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -264,7 +284,7 @@ function AuthPanel({ submitting, error, onSubmit, onSwitch }) {
   function handleConfirm(e) {
     e.preventDefault();
     if (!canSubmit) return;
-    onSubmit({
+    onNext({
       email: profile.email,
       name: profile.name,
       shippingAddress,
@@ -293,7 +313,7 @@ function AuthPanel({ submitting, error, onSubmit, onSwitch }) {
 
   return (
     <form style={styles.formCard} onSubmit={handleConfirm}>
-      <h2 style={styles.cardTitle}>Shipping &amp; payment</h2>
+      <h2 style={styles.cardTitle}>Shipping details</h2>
 
       <div style={styles.profileBox}>
         <p style={styles.profileName}>{profile.name || '—'}</p>
@@ -401,22 +421,16 @@ function AuthPanel({ submitting, error, onSubmit, onSwitch }) {
         </label>
       </div>
 
-      {error && (
-        <div style={styles.errBox}>
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-
       <button
         type="submit"
         style={{
           ...styles.payBtn,
-          opacity: submitting || !canSubmit ? 0.5 : 1,
-          cursor: submitting || !canSubmit ? 'not-allowed' : 'pointer',
+          opacity: !canSubmit ? 0.5 : 1,
+          cursor: !canSubmit ? 'not-allowed' : 'pointer',
         }}
-        disabled={submitting || !canSubmit}
+        disabled={!canSubmit}
       >
-        {submitting ? 'Processing…' : 'Confirm Payment'}
+        Continue to Payment
       </button>
       <button type="button" style={styles.linkBtnGhost} onClick={onSwitch}>
         Check out differently
@@ -425,7 +439,7 @@ function AuthPanel({ submitting, error, onSubmit, onSwitch }) {
   );
 }
 
-function GuestPanel({ submitting, error, onBack, onSubmit }) {
+function GuestPanel({ onBack, onNext }) {
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -448,7 +462,7 @@ function GuestPanel({ submitting, error, onBack, onSubmit }) {
     e.preventDefault();
     if (!valid) return;
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-    onSubmit({
+    onNext({
       email: form.email.trim(),
       name: fullName,
       shippingAddress: {
@@ -544,22 +558,16 @@ function GuestPanel({ submitting, error, onBack, onSubmit }) {
         />
       </label>
 
-      {error && (
-        <div style={styles.errBox}>
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-
       <button
         type="submit"
         style={{
           ...styles.payBtn,
-          opacity: submitting || !valid ? 0.5 : 1,
-          cursor: submitting || !valid ? 'not-allowed' : 'pointer',
+          opacity: !valid ? 0.5 : 1,
+          cursor: !valid ? 'not-allowed' : 'pointer',
         }}
-        disabled={submitting || !valid}
+        disabled={!valid}
       >
-        {submitting ? 'Processing…' : 'Confirm Payment'}
+        Continue to Payment
       </button>
       <button type="button" style={styles.linkBtnGhost} onClick={onBack}>
         ← Back to options
@@ -568,7 +576,184 @@ function GuestPanel({ submitting, error, onBack, onSubmit }) {
   );
 }
 
-function OrderSummary({ cartItems, total }) {
+function PaymentForm({ submitting, error, onApproved, onBack }) {
+  const [card, setCard] = useState({ number: '', expiry: '', cvv: '', name: '' });
+  const [processing, setProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
+
+  function formatCardNumber(val) {
+    return val
+      .replace(/\D/g, '')
+      .slice(0, 16)
+      .replace(/(.{4})/g, '$1 ')
+      .trim();
+  }
+
+  function formatExpiry(val) {
+    const digits = val.replace(/\D/g, '').slice(0, 4);
+    if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return digits;
+  }
+
+  function validate() {
+    const digits = card.number.replace(/\s/g, '');
+    if (!/^\d{16}$/.test(digits)) return 'Enter a valid 16-digit card number.';
+    const match = card.expiry.match(/^(\d{2})\/(\d{2})$/);
+    if (!match) return 'Enter expiry as MM/YY.';
+    const month = parseInt(match[1], 10);
+    const year = 2000 + parseInt(match[2], 10);
+    if (month < 1 || month > 12) return 'Invalid expiry month.';
+    const now = new Date();
+    if (
+      year < now.getFullYear() ||
+      (year === now.getFullYear() && month < now.getMonth() + 1)
+    ) {
+      return 'Your card has expired.';
+    }
+    if (!/^\d{3,4}$/.test(card.cvv)) return 'Enter a valid CVV (3 or 4 digits).';
+    if (!card.name.trim()) return 'Enter the cardholder name.';
+    return null;
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const err = validate();
+    if (err) {
+      setPaymentError(err);
+      return;
+    }
+    setPaymentError(null);
+    setProcessing(true);
+    setTimeout(() => {
+      const digits = card.number.replace(/\s/g, '');
+      const last4 = digits.slice(-4);
+      setProcessing(false);
+      if (last4 === '0000') {
+        setPaymentError('Your card was declined. Please try a different card.');
+      } else if (last4 === '9999') {
+        setPaymentError('Insufficient funds. Please try a different card.');
+      } else {
+        onApproved();
+      }
+    }, 1500);
+  }
+
+  const displayError = paymentError || error;
+  const busy = processing || submitting;
+
+  return (
+    <form style={styles.formCard} onSubmit={handleSubmit}>
+      <h2 style={styles.cardTitle}>Payment details</h2>
+      <p style={styles.lead}>
+        This is a mock payment — no real charges will be made.
+      </p>
+
+      <div style={styles.mockHint}>
+        <p style={styles.mockHintText}>
+          Test cards: any valid number works ·{' '}
+          <strong>ends in 0000</strong> → declined ·{' '}
+          <strong>ends in 9999</strong> → insufficient funds
+        </p>
+      </div>
+
+      <label style={styles.label}>
+        Cardholder name <span style={styles.req}>*</span>
+        <input
+          style={styles.input}
+          placeholder="Name on card"
+          value={card.name}
+          onChange={(e) => setCard({ ...card, name: e.target.value })}
+          autoComplete="cc-name"
+          disabled={busy}
+          required
+        />
+      </label>
+
+      <label style={styles.label}>
+        Card number <span style={styles.req}>*</span>
+        <input
+          style={styles.input}
+          placeholder="1234 5678 9012 3456"
+          value={card.number}
+          onChange={(e) =>
+            setCard({ ...card, number: formatCardNumber(e.target.value) })
+          }
+          autoComplete="cc-number"
+          inputMode="numeric"
+          maxLength={19}
+          disabled={busy}
+          required
+        />
+      </label>
+
+      <div style={styles.rowGrid}>
+        <label style={styles.label}>
+          Expiry <span style={styles.req}>*</span>
+          <input
+            style={styles.input}
+            placeholder="MM/YY"
+            value={card.expiry}
+            onChange={(e) =>
+              setCard({ ...card, expiry: formatExpiry(e.target.value) })
+            }
+            autoComplete="cc-exp"
+            inputMode="numeric"
+            maxLength={5}
+            disabled={busy}
+            required
+          />
+        </label>
+        <label style={styles.label}>
+          CVV <span style={styles.req}>*</span>
+          <input
+            style={styles.input}
+            placeholder="123"
+            value={card.cvv}
+            onChange={(e) =>
+              setCard({
+                ...card,
+                cvv: e.target.value.replace(/\D/g, '').slice(0, 4),
+              })
+            }
+            autoComplete="cc-csc"
+            inputMode="numeric"
+            maxLength={4}
+            disabled={busy}
+            required
+          />
+        </label>
+      </div>
+
+      {displayError && (
+        <div style={styles.errBox}>
+          <AlertCircle size={16} /> {displayError}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        style={{
+          ...styles.payBtn,
+          opacity: busy ? 0.5 : 1,
+          cursor: busy ? 'not-allowed' : 'pointer',
+        }}
+        disabled={busy}
+      >
+        {processing ? 'Processing payment…' : submitting ? 'Placing order…' : 'Pay now'}
+      </button>
+      <button
+        type="button"
+        style={styles.linkBtnGhost}
+        onClick={onBack}
+        disabled={busy}
+      >
+        ← Back to shipping
+      </button>
+    </form>
+  );
+}
+
+function OrderSummary({ cartItems, total, getProduct }) {
   return (
     <div style={styles.summary}>
       <h2 style={styles.summaryHeading}>Order summary</h2>
@@ -784,6 +969,22 @@ const styles = {
     gridTemplateColumns: '1fr 1fr',
     gap: 'var(--space-2)',
     marginTop: 'var(--space-3)',
+  },
+
+  /* Payment step */
+  mockHint: {
+    padding: 'var(--space-3) var(--space-4)',
+    backgroundColor: 'var(--color-sand)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+    marginBottom: 'var(--space-4)',
+  },
+  mockHintText: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal)',
+    lineHeight: 1.5,
   },
 
   /* Guest step */
