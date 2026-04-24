@@ -475,7 +475,11 @@ function OrdersSection() {
 }
 
 function OrderCard({ order }) {
+  const navigate = useNavigate();
   const stepIdx = ORDER_STEPS.indexOf(order.status);
+  const goToInvoice = () => {
+    if (order.orderId) navigate(`/invoice/${order.orderId}`);
+  };
 
   return (
     <div style={styles.orderCard}>
@@ -548,10 +552,10 @@ function OrderCard({ order }) {
         </div>
         <div style={styles.orderActions}>
           {order.status !== 'delivered' ? (
-            <button className="pf-btn-ghost" style={styles.btnGhost}>Track order</button>
+            <button className="pf-btn-ghost" style={styles.btnGhost} onClick={goToInvoice}>Track order</button>
           ) : (
             <>
-              <button className="pf-btn-ghost" style={styles.btnGhost}>Invoice</button>
+              <button className="pf-btn-ghost" style={styles.btnGhost} onClick={goToInvoice}>Invoice</button>
               <button className="pf-btn-ghost" style={styles.btnGhost}>Request return</button>
             </>
           )}
