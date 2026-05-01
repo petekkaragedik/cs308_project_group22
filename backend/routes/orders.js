@@ -120,12 +120,14 @@ module.exports = function createOrderRoutes(db, requireAuth) {
       const total = roundMoney(resolvedLines.reduce((s, l) => s + l.line_total, 0));
       const invoice_number = `INV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+      const userId = req.user && req.user.id ? req.user.id : null;
       const [orderResult] = await conn.query(
-        `INSERT INTO orders (invoice_number, customer_email, customer_name, total_amount, currency, status)
-         VALUES (?, ?, ?, ?, 'TRY', 'processing')`,
-        [invoice_number, email, name, total]
+        `INSERT INTO orders (user_id, invoice_number, customer_email, customer_name, total_amount, currency, status)
+         VALUES (?, ?, ?, ?, ?, 'TRY', 'processing')`,
+        [userId, invoice_number, email, name, total]
       );
       const orderId = orderResult.insertId;
+      
 
       for (const line of resolvedLines) {
         await conn.query(
