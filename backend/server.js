@@ -7,6 +7,7 @@ const cors = require("cors");
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const productRoutes = require('./routes/products');
 
 const createOrderRoutes = require("./routes/orders");
 
@@ -15,6 +16,8 @@ const app = express();
 // Allow browser calls from CRA (any port / localhost vs 127.0.0.1) when using REACT_APP_API_URL
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use('/api/products', productRoutes);
+
 
 // db connection
 const db = mysql.createPool({
