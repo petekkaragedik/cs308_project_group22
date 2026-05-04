@@ -1,43 +1,65 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Mail } from 'lucide-react';
 import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
-function getPostLoginTarget(search) {
-  const raw = new URLSearchParams(search).get('next');
-  if (raw && /^\/[^/]/.test(raw)) return raw;
-  return '/products';
-}
-
-function Login() {
+function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const location = useLocation();
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    fetch(apiUrl("/api/login"), {
+    fetch(apiUrl("/api/forgot-password"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email })
     })
       .then(res => res.json())
       .then(data => {
-        if (data.token) {
-          localStorage.setItem("token", data.token);
-          window.location.href = getPostLoginTarget(location.search);
-        } else {
-          alert("Invalid credentials");
-        }
+        setLoading(false);
+        setSubmitted(true);
       })
       .catch(err => {
         console.error(err);
-        alert("Error occurred");
+        setLoading(false);
+        setError("Something went wrong. Please try again.");
       });
   };
+
+  if (submitted) {
+    return (
+      <>
+        <Navbar />
+        <div style={styles.page}>
+          <img src="/scylla_logo.png" alt="Scylla Logo" style={styles.logo} />
+          <div style={styles.card}>
+            <div style={styles.header}>
+              <h2 style={styles.title}>Check your email</h2>
+              <p style={styles.subtitle}>
+                If an account exists with that email, we sent a password reset link.
+              </p>
+            </div>
+            <div style={styles.successBox}>
+              <p style={styles.successText}>
+                The link will expire in 1 hour. Check your spam folder if you don't see it.
+              </p>
+            </div>
+            <p style={styles.footerText}>
+              <Link to="/login" style={styles.link}>Return to sign in</Link>
+            </p>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>
@@ -46,9 +68,13 @@ function Login() {
         <img src="/scylla_logo.png" alt="Scylla Logo" style={styles.logo} />
         <div style={styles.card}>
           <div style={styles.header}>
-            <h2 style={styles.title}>Welcome back!</h2>
-            <p style={styles.subtitle}>Sign in to your account</p>
+            <h2 style={styles.title}>Forgot your password?</h2>
+            <p style={styles.subtitle}>
+              Enter your email and we'll send you a reset link
+            </p>
           </div>
+
+          {error && <div style={styles.errorBox}>{error}</div>}
 
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.inputGroup}>
@@ -60,33 +86,17 @@ function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
 
-            <div style={styles.inputGroup}>
-              <Lock size={20} color="var(--color-charcoal-light)" style={styles.icon} />
-              <input
-                type="password"
-                placeholder="Password"
-                style={styles.input}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            <div style={styles.forgotPassword}>
-              <Link to="/forgot-password" style={styles.forgotLink}>
-                Forgot Password?
-              </Link>
-            </div>
-
-            <button type="submit" style={styles.button}>
-              SIGN IN
+            <button type="submit" style={styles.button} disabled={loading}>
+              {loading ? 'SENDING...' : 'SEND RESET LINK'}
             </button>
           </form>
+
           <p style={styles.footerText}>
-            If you don't have an account <Link to="/register" style={styles.link}>click here to register</Link>
+            Remember your password? <Link to="/login" style={styles.link}>Sign in</Link>
           </p>
         </div>
       </div>
@@ -196,22 +206,28 @@ const styles = {
     fontWeight: 'var(--weight-semibold)',
     borderBottom: '1px solid var(--color-charcoal)',
   },
-  forgotPassword: {
-    textAlign: 'right',
-    marginTop: 'var(--space-1)',
-  },
-  forgotLink: {
+  errorBox: {
+    padding: 'var(--space-3) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-error)',
+    color: '#991b1b',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
-    color: 'var(--color-charcoal-light)',
-    textDecoration: 'none',
-    borderBottom: '1px solid transparent',
-    transition: 'all var(--transition-fast)',
-    ':hover': {
-      color: 'var(--color-charcoal)',
-      borderBottom: '1px solid var(--color-charcoal)',
-    }
+    marginBottom: 'var(--space-4)',
+  },
+  successBox: {
+    padding: 'var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-blue)',
+    marginBottom: 'var(--space-6)',
+  },
+  successText: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    lineHeight: 1.6,
   }
 };
 
-export default Login;
+export default ForgotPassword;

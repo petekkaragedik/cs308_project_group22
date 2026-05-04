@@ -7,7 +7,9 @@ const cors = require("cors");
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const productRoutes = require('./routes/products');
+const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
 const createOrderRoutes = require("./routes/orders");
 const createReturnRoutes = require("./routes/returns");
@@ -160,6 +162,102 @@ app.post("/api/login", async (req, res) => {
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Login failed" });
+  }
+});
+
+// ─── Password Reset ────────────────────────────────────
+
+// POST /api/forgot-password — request password reset
+app.post("/api/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ message: "Valid email is required" });
+  }
+
+  try {
+    // Look up user by email (case-insensitive)
+    const [users] = await db.query("SELECT id, email FROM users WHERE email = ?", [email.toLowerCase()]);
+
+    // Security: Always return 200 (don't reveal if email exists)
+    if (users.length === 0) {
+      return res.json({ message: "If that email exists, we sent a reset link" });
+    }
+
+    const user = users[0];
+
+    // Generate cryptographically secure token
+    const token = crypto.randomBytes(32).toString('hex');
+
+    // Delete any existing tokens for this user
+    await db.query("DELETE FROM password_reset_tokens WHERE user_id = ?", [user.id]);
+
+    // Store new token with 1-hour expiry
+    await db.query(
+      "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))",
+      [user.id, token]
+    );
+
+    // Send reset email (async, don't wait)
+    sendPasswordResetEmail({ to: user.email, resetToken: token }).catch(err => {
+      console.error("Failed to send password reset email:", err);
+    });
+
+    res.json({ message: "If that email exists, we sent a reset link" });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ message: "Failed to process request" });
+  }
+});
+
+// POST /api/reset-password — reset password with valid token
+app.post("/api/reset-password", async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !token.trim()) {
+    return res.status(400).json({ message: "Reset token is required" });
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters" });
+  }
+
+  let conn;
+  try {
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    // Find valid token (not expired)
+    const [tokens] = await conn.query(
+      "SELECT user_id FROM password_reset_tokens WHERE token = ? AND expires_at > NOW()",
+      [token.trim()]
+    );
+
+    if (tokens.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    const userId = tokens[0].user_id;
+
+    // Hash new password
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    // Update user's password
+    await conn.query("UPDATE users SET password = ? WHERE id = ?", [hashed, userId]);
+
+    // Delete the used token (and all others for this user)
+    await conn.query("DELETE FROM password_reset_tokens WHERE user_id = ?", [userId]);
+
+    await conn.commit();
+
+    res.json({ message: "Password reset successful" });
+  } catch (error) {
+    try { await conn?.rollback(); } catch (_) { /* ignore */ }
+    console.error("Reset password error:", error);
+    res.status(500).json({ message: "Failed to reset password" });
+  } finally {
+    conn?.release();
   }
 });
 
@@ -960,6 +1058,172 @@ app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'
   } catch (error) {
     console.error("Delete comment error:", error);
     res.status(500).json({ message: "Failed to delete comment" });
+  }
+});
+
+// ─── Product Manager Dashboard ─────────────────────────
+
+// GET /api/product-manager/dashboard-summary — quick metrics for dashboard
+app.get("/api/product-manager/dashboard-summary", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [results] = await db.query(`
+      SELECT
+        (SELECT COUNT(*) FROM comments WHERE status = 'pending') as pending_comments,
+        (SELECT COUNT(*) FROM orders WHERE status = 'processing') as processing_orders,
+        (SELECT COUNT(*) FROM orders WHERE status = 'in_transit') as in_transit_orders,
+        (SELECT COUNT(*) FROM products WHERE quantityInStock < 10 AND quantityInStock > 0) as low_stock,
+        (SELECT COUNT(*) FROM products WHERE quantityInStock = 0) as out_of_stock
+    `);
+    res.json(results[0]);
+  } catch (error) {
+    console.error("Dashboard summary error:", error);
+    res.status(500).json({ message: "Failed to fetch dashboard summary" });
+  }
+});
+
+// GET /api/product-manager/stock-overview — list products with stock levels
+app.get("/api/product-manager/stock-overview", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT id, name, model, quantityInStock, price, categoryName
+      FROM products
+      ORDER BY quantityInStock ASC, name ASC
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error("Stock overview error:", error);
+    res.status(500).json({ message: "Failed to fetch stock overview" });
+  }
+});
+
+// GET /api/product-manager/deliveries — list orders with filtering
+app.get("/api/product-manager/deliveries", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const status = req.query.status || 'all';
+  const allowedStatuses = ['processing', 'in_transit', 'delivered', 'cancelled', 'all'];
+
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status filter" });
+  }
+
+  try {
+    let query = `
+      SELECT
+        o.id, o.invoice_number, o.status, o.created_at, o.total_amount, o.currency,
+        o.customer_email, o.customer_name,
+        COUNT(oi.id) as item_count
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+    `;
+
+    const params = [];
+    if (status !== 'all') {
+      query += " WHERE o.status = ?";
+      params.push(status);
+    }
+
+    query += " GROUP BY o.id ORDER BY o.created_at DESC";
+
+    const [rows] = await db.query(query, params);
+    res.json(rows);
+  } catch (error) {
+    console.error("Deliveries fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch deliveries" });
+  }
+});
+
+// PUT /api/product-manager/products/:id/stock — update product stock
+app.put("/api/product-manager/products/:id/stock", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const productId = req.params.id;
+  const quantityInStock = Number(req.body?.quantityInStock);
+
+  if (!productId || !productId.trim()) {
+    return res.status(400).json({ message: "Invalid product ID" });
+  }
+  if (!Number.isInteger(quantityInStock) || quantityInStock < 0) {
+    return res.status(400).json({ message: "Stock quantity must be a non-negative integer" });
+  }
+
+  try {
+    const [result] = await db.query(
+      "UPDATE products SET quantityInStock = ? WHERE id = ?",
+      [quantityInStock, productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [rows] = await db.query(
+      "SELECT id, name, model, quantityInStock, price, categoryName FROM products WHERE id = ?",
+      [productId]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Stock update error:", error);
+    res.status(500).json({ message: "Failed to update stock" });
+  }
+});
+
+// PUT /api/product-manager/orders/:id/status — update order status
+app.put("/api/product-manager/orders/:id/status", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const orderId = Number(req.params.id);
+  const newStatus = req.body?.status;
+
+  if (!Number.isInteger(orderId) || orderId < 1) {
+    return res.status(400).json({ message: "Invalid order ID" });
+  }
+
+  const validStatuses = ['processing', 'in_transit', 'delivered', 'cancelled'];
+  if (!newStatus || !validStatuses.includes(newStatus)) {
+    return res.status(400).json({
+      message: `Invalid status. Must be one of: processing, in_transit, delivered, cancelled`
+    });
+  }
+
+  try {
+    const [orderRows] = await db.query("SELECT id, status FROM orders WHERE id = ?", [orderId]);
+
+    if (orderRows.length === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const currentStatus = orderRows[0].status;
+
+    // Validate status flow: processing → in_transit → delivered
+    const statusFlow = {
+      'processing': ['in_transit', 'cancelled'],
+      'in_transit': ['delivered', 'cancelled'],
+      'delivered': [],
+      'cancelled': []
+    };
+
+    if (!statusFlow[currentStatus]?.includes(newStatus)) {
+      return res.status(400).json({
+        message: `Cannot change status from "${currentStatus}" to "${newStatus}". Valid transitions: ${statusFlow[currentStatus]?.join(', ') || 'none'}`
+      });
+    }
+
+    const [result] = await db.query(
+      "UPDATE orders SET status = ? WHERE id = ?",
+      [newStatus, orderId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ message: "Failed to update order status" });
+    }
+
+    const [updatedRows] = await db.query(
+      "SELECT id, invoice_number, status, created_at, total_amount, currency, customer_email, customer_name FROM orders WHERE id = ?",
+      [orderId]
+    );
+
+    res.json({
+      message: "Order status updated successfully",
+      order: updatedRows[0]
+    });
+  } catch (error) {
+    console.error("Order status update error:", error);
+    res.status(500).json({ message: "Failed to update order status" });
   }
 });
 

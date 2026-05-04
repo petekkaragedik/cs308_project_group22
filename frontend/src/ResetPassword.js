@@ -1,43 +1,102 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
-function getPostLoginTarget(search) {
-  const raw = new URLSearchParams(search).get('next');
-  if (raw && /^\/[^/]/.test(raw)) return raw;
-  return '/products';
-}
-
-function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+function ResetPassword() {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Extract token from URL query params
+    const params = new URLSearchParams(location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam) {
+      setToken(tokenParam);
+    } else {
+      setError('Invalid reset link. Please request a new password reset.');
+    }
+  }, [location]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setError('');
 
-    fetch(apiUrl("/api/login"), {
+    // Client-side validation
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (!token) {
+      setError('Invalid reset link');
+      return;
+    }
+
+    setLoading(true);
+
+    fetch(apiUrl("/api/reset-password"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ token, newPassword })
     })
       .then(res => res.json())
       .then(data => {
-        if (data.token) {
-          localStorage.setItem("token", data.token);
-          window.location.href = getPostLoginTarget(location.search);
+        setLoading(false);
+        if (data.message === "Password reset successful") {
+          setSuccess(true);
+          // Redirect to login after 2 seconds
+          setTimeout(() => {
+            navigate('/login');
+          }, 2000);
         } else {
-          alert("Invalid credentials");
+          setError(data.message || "Failed to reset password");
         }
       })
       .catch(err => {
         console.error(err);
-        alert("Error occurred");
+        setLoading(false);
+        setError("Something went wrong. Please try again.");
       });
   };
+
+  if (success) {
+    return (
+      <>
+        <Navbar />
+        <div style={styles.page}>
+          <img src="/scylla_logo.png" alt="Scylla Logo" style={styles.logo} />
+          <div style={styles.card}>
+            <div style={styles.header}>
+              <h2 style={styles.title}>Password Reset!</h2>
+              <p style={styles.subtitle}>
+                Your password has been reset successfully.
+              </p>
+            </div>
+            <div style={styles.successBox}>
+              <p style={styles.successText}>
+                Redirecting you to login...
+              </p>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>
@@ -46,20 +105,26 @@ function Login() {
         <img src="/scylla_logo.png" alt="Scylla Logo" style={styles.logo} />
         <div style={styles.card}>
           <div style={styles.header}>
-            <h2 style={styles.title}>Welcome back!</h2>
-            <p style={styles.subtitle}>Sign in to your account</p>
+            <h2 style={styles.title}>Reset your password</h2>
+            <p style={styles.subtitle}>
+              Enter your new password below
+            </p>
           </div>
+
+          {error && <div style={styles.errorBox}>{error}</div>}
 
           <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.inputGroup}>
-              <Mail size={20} color="var(--color-charcoal-light)" style={styles.icon} />
+              <Lock size={20} color="var(--color-charcoal-light)" style={styles.icon} />
               <input
-                type="email"
-                placeholder="Email Address"
+                type="password"
+                placeholder="New Password"
                 style={styles.input}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
                 required
+                disabled={loading || !token}
+                minLength={8}
               />
             </div>
 
@@ -67,26 +132,23 @@ function Login() {
               <Lock size={20} color="var(--color-charcoal-light)" style={styles.icon} />
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="Confirm Password"
                 style={styles.input}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
+                disabled={loading || !token}
+                minLength={8}
               />
             </div>
 
-            <div style={styles.forgotPassword}>
-              <Link to="/forgot-password" style={styles.forgotLink}>
-                Forgot Password?
-              </Link>
-            </div>
-
-            <button type="submit" style={styles.button}>
-              SIGN IN
+            <button type="submit" style={styles.button} disabled={loading || !token}>
+              {loading ? 'RESETTING...' : 'RESET PASSWORD'}
             </button>
           </form>
+
           <p style={styles.footerText}>
-            If you don't have an account <Link to="/register" style={styles.link}>click here to register</Link>
+            Remember your password? <Link to="/login" style={styles.link}>Sign in</Link>
           </p>
         </div>
       </div>
@@ -196,22 +258,29 @@ const styles = {
     fontWeight: 'var(--weight-semibold)',
     borderBottom: '1px solid var(--color-charcoal)',
   },
-  forgotPassword: {
-    textAlign: 'right',
-    marginTop: 'var(--space-1)',
-  },
-  forgotLink: {
+  errorBox: {
+    padding: 'var(--space-3) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-error)',
+    color: '#991b1b',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
-    color: 'var(--color-charcoal-light)',
-    textDecoration: 'none',
-    borderBottom: '1px solid transparent',
-    transition: 'all var(--transition-fast)',
-    ':hover': {
-      color: 'var(--color-charcoal)',
-      borderBottom: '1px solid var(--color-charcoal)',
-    }
+    marginBottom: 'var(--space-4)',
+  },
+  successBox: {
+    padding: 'var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-success)',
+    marginBottom: 'var(--space-6)',
+  },
+  successText: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-black)',
+    lineHeight: 1.6,
+    textAlign: 'center',
   }
 };
 
-export default Login;
+export default ResetPassword;

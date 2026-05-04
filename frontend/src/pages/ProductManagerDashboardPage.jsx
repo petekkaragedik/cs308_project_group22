@@ -1,0 +1,840 @@
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../apiBase';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+
+const DASHBOARD_TABS = [
+  { key: 'stock', label: 'Stock Management' },
+  { key: 'deliveries', label: 'Deliveries' },
+  { key: 'comments', label: 'Comment Moderation' },
+];
+
+const ORDER_STATUS_FILTERS = [
+  { key: 'processing', label: 'Processing' },
+  { key: 'in_transit', label: 'In Transit' },
+  { key: 'delivered', label: 'Delivered' },
+  { key: 'all', label: 'All' },
+];
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function formatDate(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function getStockStatus(quantity) {
+  if (quantity === 0) return 'out';
+  if (quantity < 10) return 'low';
+  return 'good';
+}
+
+function stockBadgeStyle(quantity) {
+  const base = {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--color-black)',
+  };
+  const status = getStockStatus(quantity);
+  if (status === 'good') return { ...base, backgroundColor: 'var(--color-success)' };
+  if (status === 'low') return { ...base, backgroundColor: 'var(--color-warning)' };
+  return { ...base, backgroundColor: 'var(--color-error)' };
+}
+
+function orderStatusBadge(status) {
+  const base = {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--color-black)',
+  };
+  if (status === 'processing') return { ...base, backgroundColor: 'var(--color-warning)' };
+  if (status === 'in_transit') return { ...base, backgroundColor: 'var(--color-blue)' };
+  if (status === 'delivered') return { ...base, backgroundColor: 'var(--color-success)' };
+  if (status === 'cancelled') return { ...base, backgroundColor: 'var(--color-error)' };
+  return { ...base, backgroundColor: 'var(--color-border)' };
+}
+
+export default function ProductManagerDashboardPage() {
+  const navigate = useNavigate();
+  const [authState, setAuthState] = useState('checking');
+  const [activeTab, setActiveTab] = useState('stock');
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Stock state
+  const [products, setProducts] = useState([]);
+  const [editingStockId, setEditingStockId] = useState(null);
+  const [editStockValue, setEditStockValue] = useState('');
+
+  // Delivery state
+  const [orders, setOrders] = useState([]);
+  const [orderStatusFilter, setOrderStatusFilter] = useState('processing');
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login?next=/product-manager/dashboard');
+      return;
+    }
+    fetch(apiUrl('/api/profile'), { headers: authHeaders() })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data) => {
+        if (data?.role === 'product_manager') {
+          setAuthState('authorized');
+        } else {
+          setAuthState('unauthorized');
+        }
+      })
+      .catch(() => setAuthState('unauthorized'));
+  }, [navigate]);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/product-manager/dashboard-summary'), {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSummary(data);
+      }
+    } catch {
+      /* keep existing summary */
+    }
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(apiUrl('/api/product-manager/stock-overview'), {
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setProducts(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError('Could not load products. Please try again.');
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const url = apiUrl(`/api/product-manager/deliveries?status=${encodeURIComponent(orderStatusFilter)}`);
+      const res = await fetch(url, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError('Could not load orders. Please try again.');
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderStatusFilter]);
+
+  useEffect(() => {
+    if (authState === 'authorized') {
+      loadSummary();
+      if (activeTab === 'stock') loadProducts();
+      if (activeTab === 'deliveries') loadOrders();
+    }
+  }, [authState, activeTab, loadSummary, loadProducts, loadOrders]);
+
+  async function updateStock(productId, newStock) {
+    try {
+      const res = await fetch(apiUrl(`/api/product-manager/products/${productId}/stock`), {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantityInStock: newStock }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadProducts();
+      await loadSummary();
+      setEditingStockId(null);
+      setEditStockValue('');
+    } catch (e) {
+      setError('Failed to update stock.');
+    }
+  }
+
+  function startEditStock(product) {
+    setEditingStockId(product.id);
+    setEditStockValue(String(product.quantityInStock));
+  }
+
+  function cancelEditStock() {
+    setEditingStockId(null);
+    setEditStockValue('');
+  }
+
+  function saveStock(productId) {
+    const val = Number(editStockValue);
+    if (!Number.isInteger(val) || val < 0) {
+      setError('Stock must be a non-negative integer.');
+      return;
+    }
+    updateStock(productId, val);
+  }
+
+  async function updateOrderStatus(orderId, newStatus) {
+    setUpdatingOrderId(orderId);
+    setError('');
+    try {
+      const res = await fetch(apiUrl(`/api/product-manager/orders/${orderId}/status`), {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `Failed to update order status`);
+      }
+
+      await loadOrders();
+      await loadSummary();
+    } catch (e) {
+      setError(e.message || 'Failed to update order status. Please try again.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  }
+
+  function getNextStatuses(currentStatus) {
+    const statusFlow = {
+      'processing': ['in_transit', 'cancelled'],
+      'in_transit': ['delivered', 'cancelled'],
+      'delivered': [],
+      'cancelled': []
+    };
+    return statusFlow[currentStatus] || [];
+  }
+
+  if (authState === 'checking') {
+    return (
+      <>
+        <Navbar />
+        <div style={styles.center}>
+          <span style={styles.centerText}>Loading...</span>
+        </div>
+        <Footer />
+      </>
+    );
+  }
+
+  if (authState === 'unauthorized') {
+    return (
+      <>
+        <Navbar />
+        <div style={styles.center}>
+          <h1 style={styles.deniedTitle}>Access Denied</h1>
+          <p style={styles.deniedText}>
+            This page is only available to product managers.
+          </p>
+        </div>
+        <Footer />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{`
+        .pm-tab { cursor: pointer; }
+        .pm-tab:hover { background-color: var(--color-blue) !important; }
+        .pm-tab.active { background-color: var(--color-charcoal) !important; color: var(--color-sand) !important; }
+        .pm-filter-tab { cursor: pointer; }
+        .pm-filter-tab:hover { background-color: var(--color-blue) !important; }
+        .pm-filter-tab.active { background-color: var(--color-charcoal) !important; color: var(--color-sand) !important; }
+        .stock-edit-btn:hover { background-color: var(--color-blue) !important; }
+        .stock-save-btn:hover { background-color: var(--color-success) !important; }
+        .stock-cancel-btn:hover { background-color: var(--color-error) !important; }
+        .status-update-btn:hover:not(:disabled) { background-color: var(--color-blue) !important; color: var(--color-white) !important; }
+        .status-update-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      `}</style>
+
+      <Navbar />
+
+      <div style={styles.page}>
+        <h1 style={styles.title}>Product Manager Dashboard</h1>
+        <p style={styles.subtitle}>
+          Manage product stock, track deliveries, and moderate customer comments.
+        </p>
+
+        {/* Summary Cards */}
+        {summary && (
+          <div style={styles.summaryGrid}>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>Pending Comments</div>
+              <div style={styles.summaryValue}>{summary.pending_comments || 0}</div>
+            </div>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>Processing Orders</div>
+              <div style={styles.summaryValue}>{summary.processing_orders || 0}</div>
+            </div>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>In Transit</div>
+              <div style={styles.summaryValue}>{summary.in_transit_orders || 0}</div>
+            </div>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>Low Stock</div>
+              <div style={styles.summaryValue}>{summary.low_stock || 0}</div>
+            </div>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>Out of Stock</div>
+              <div style={styles.summaryValue}>{summary.out_of_stock || 0}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Tabs */}
+        <div style={styles.tabs}>
+          {DASHBOARD_TABS.map((t) => (
+            <button
+              key={t.key}
+              className={`pm-tab${activeTab === t.key ? ' active' : ''}`}
+              style={styles.tab}
+              onClick={() => setActiveTab(t.key)}
+            >
+              {t.label}
+              {t.key === 'comments' && summary?.pending_comments > 0 && (
+                <span style={styles.badge}>{summary.pending_comments}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {error && <div style={styles.errorBox}>{error}</div>}
+
+        {/* Stock Management Tab */}
+        {activeTab === 'stock' && (
+          <>
+            {loading ? (
+              <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
+            ) : products.length === 0 ? (
+              <div style={styles.empty}>No products found.</div>
+            ) : (
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Product</th>
+                      <th style={styles.th}>Model</th>
+                      <th style={styles.th}>Category</th>
+                      <th style={styles.th}>Price (TRY)</th>
+                      <th style={styles.th}>Stock</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p.id} style={styles.tr}>
+                        <td style={styles.td}>{p.name}</td>
+                        <td style={styles.td}>{p.model || '-'}</td>
+                        <td style={styles.td}>{p.categoryName || '-'}</td>
+                        <td style={styles.td}>₺{Number(p.price).toFixed(2)}</td>
+                        <td style={styles.td}>
+                          {editingStockId === p.id ? (
+                            <input
+                              type="number"
+                              min="0"
+                              value={editStockValue}
+                              onChange={(e) => setEditStockValue(e.target.value)}
+                              style={styles.stockInput}
+                            />
+                          ) : (
+                            p.quantityInStock
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          <span style={stockBadgeStyle(p.quantityInStock)}>
+                            {getStockStatus(p.quantityInStock)}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          {editingStockId === p.id ? (
+                            <div style={styles.stockActions}>
+                              <button
+                                className="stock-save-btn"
+                                style={styles.stockBtn}
+                                onClick={() => saveStock(p.id)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                className="stock-cancel-btn"
+                                style={styles.stockBtn}
+                                onClick={cancelEditStock}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="stock-edit-btn"
+                              style={styles.stockBtn}
+                              onClick={() => startEditStock(p)}
+                            >
+                              Edit Stock
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Deliveries Tab */}
+        {activeTab === 'deliveries' && (
+          <>
+            <div style={styles.filterTabs}>
+              {ORDER_STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  className={`pm-filter-tab${orderStatusFilter === f.key ? ' active' : ''}`}
+                  style={styles.filterTab}
+                  onClick={() => setOrderStatusFilter(f.key)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {loading ? (
+              <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
+            ) : orders.length === 0 ? (
+              <div style={styles.empty}>No orders in this category.</div>
+            ) : (
+              <div style={styles.list}>
+                {orders.map((o) => {
+                  const nextStatuses = getNextStatuses(o.status);
+                  const canUpdate = nextStatuses.length > 0;
+                  const isUpdating = updatingOrderId === o.id;
+
+                  return (
+                    <div key={o.id} style={styles.card}>
+                      <div style={styles.cardHeader}>
+                        <div>
+                          <div style={styles.invoiceNumber}>#{o.invoice_number}</div>
+                          <div style={styles.orderMeta}>
+                            {o.customer_name} · {o.customer_email}
+                          </div>
+                        </div>
+                        <span style={orderStatusBadge(o.status)}>
+                          {String(o.status).replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div style={styles.orderDetails}>
+                        <div style={styles.orderDetail}>
+                          <span style={styles.orderLabel}>Total:</span>
+                          <span style={styles.orderValue}>
+                            ₺{Number(o.total_amount).toFixed(2)} {o.currency || 'TRY'}
+                          </span>
+                        </div>
+                        <div style={styles.orderDetail}>
+                          <span style={styles.orderLabel}>Items:</span>
+                          <span style={styles.orderValue}>{o.item_count}</span>
+                        </div>
+                        <div style={styles.orderDetail}>
+                          <span style={styles.orderLabel}>Date:</span>
+                          <span style={styles.orderValue}>{formatDate(o.created_at)}</span>
+                        </div>
+                      </div>
+
+                      {canUpdate && (
+                        <div style={styles.statusUpdateSection}>
+                          <div style={styles.statusUpdateLabel}>Update Status:</div>
+                          <div style={styles.statusUpdateActions}>
+                            {nextStatuses.map((status) => (
+                              <button
+                                key={status}
+                                className="status-update-btn"
+                                style={styles.statusUpdateBtn}
+                                onClick={() => updateOrderStatus(o.id, status)}
+                                disabled={isUpdating}
+                              >
+                                {isUpdating ? 'Updating...' : `Mark as ${String(status).replace(/_/g, ' ')}`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Comment Moderation Tab */}
+        {activeTab === 'comments' && (
+          <div style={styles.moderationLink}>
+            <p style={styles.moderationText}>
+              Manage customer comments and reviews
+            </p>
+            <button
+              style={styles.moderationBtn}
+              onClick={() => navigate('/admin/moderation')}
+            >
+              Go to Comment Moderation
+            </button>
+          </div>
+        )}
+      </div>
+
+      <Footer />
+    </>
+  );
+}
+
+const styles = {
+  page: {
+    minHeight: '70vh',
+    backgroundColor: 'var(--color-sand)',
+    padding: 'var(--space-10) var(--container-pad)',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  title: {
+    margin: 0,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-3xl)',
+    fontWeight: 'var(--weight-regular)',
+    color: 'var(--color-black)',
+    letterSpacing: 'var(--tracking-wide)',
+  },
+  subtitle: {
+    margin: 'var(--space-2) 0 var(--space-6) 0',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+  },
+  summaryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: 'var(--space-4)',
+    marginBottom: 'var(--space-6)',
+  },
+  summaryCard: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-lg)',
+    padding: 'var(--space-4)',
+    boxShadow: 'var(--shadow-card)',
+    border: '1px solid var(--color-border)',
+    textAlign: 'center',
+  },
+  summaryLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+    marginBottom: 'var(--space-2)',
+    textTransform: 'uppercase',
+    letterSpacing: 'var(--tracking-wide)',
+  },
+  summaryValue: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-3xl)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-black)',
+  },
+  tabs: {
+    display: 'flex',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-6)',
+    flexWrap: 'wrap',
+  },
+  tab: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-2) var(--space-4)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 20,
+    height: 20,
+    padding: '0 6px',
+    borderRadius: 'var(--radius-full)',
+    backgroundColor: 'var(--color-warning)',
+    color: 'var(--color-black)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-bold)',
+    letterSpacing: 'var(--tracking-normal)',
+  },
+  filterTabs: {
+    display: 'flex',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-4)',
+    flexWrap: 'wrap',
+  },
+  filterTab: {
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-2) var(--space-3)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+  tableContainer: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-lg)',
+    boxShadow: 'var(--shadow-card)',
+    border: '1px solid var(--color-border)',
+    overflowX: 'auto',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontFamily: 'var(--font-body)',
+  },
+  th: {
+    backgroundColor: 'var(--color-sand)',
+    padding: 'var(--space-3) var(--space-4)',
+    textAlign: 'left',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-charcoal)',
+    textTransform: 'uppercase',
+    letterSpacing: 'var(--tracking-wide)',
+    borderBottom: '2px solid var(--color-border)',
+  },
+  tr: {
+    borderBottom: '1px solid var(--color-border)',
+  },
+  td: {
+    padding: 'var(--space-3) var(--space-4)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+  },
+  stockInput: {
+    width: '80px',
+    padding: 'var(--space-1) var(--space-2)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+  },
+  stockActions: {
+    display: 'flex',
+    gap: 'var(--space-2)',
+  },
+  stockBtn: {
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-1) var(--space-3)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+  },
+  list: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-4)',
+  },
+  card: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-lg)',
+    padding: 'var(--space-5) var(--space-6)',
+    boxShadow: 'var(--shadow-card)',
+    border: '1px solid var(--color-border)',
+  },
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 'var(--space-4)',
+    gap: 'var(--space-3)',
+    flexWrap: 'wrap',
+  },
+  invoiceNumber: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-lg)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-black)',
+  },
+  orderMeta: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+    marginTop: 'var(--space-1)',
+  },
+  orderDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-2)',
+  },
+  orderDetail: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+  },
+  orderValue: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    color: 'var(--color-charcoal)',
+  },
+  statusUpdateSection: {
+    marginTop: 'var(--space-4)',
+    paddingTop: 'var(--space-4)',
+    borderTop: '1px solid var(--color-border)',
+  },
+  statusUpdateLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-charcoal-light)',
+    textTransform: 'uppercase',
+    letterSpacing: 'var(--tracking-wide)',
+    marginBottom: 'var(--space-2)',
+  },
+  statusUpdateActions: {
+    display: 'flex',
+    gap: 'var(--space-2)',
+    flexWrap: 'wrap',
+  },
+  statusUpdateBtn: {
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-2) var(--space-4)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+  moderationLink: {
+    textAlign: 'center',
+    padding: 'var(--space-10) 0',
+  },
+  moderationText: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-charcoal)',
+    marginBottom: 'var(--space-4)',
+  },
+  moderationBtn: {
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-3) var(--space-6)',
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-sand)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+  },
+  empty: {
+    padding: 'var(--space-10) 0',
+    textAlign: 'center',
+    fontFamily: 'var(--font-heading)',
+    fontStyle: 'italic',
+    fontSize: 'var(--text-xl)',
+    color: 'var(--color-charcoal-light)',
+  },
+  center: {
+    minHeight: '60vh',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 'var(--space-10) var(--container-pad)',
+  },
+  centerText: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-xl)',
+    color: 'var(--color-charcoal-light)',
+  },
+  deniedTitle: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-3xl)',
+    color: 'var(--color-black)',
+    margin: 0,
+  },
+  deniedText: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-charcoal-light)',
+    marginTop: 'var(--space-2)',
+  },
+  errorBox: {
+    padding: 'var(--space-3) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-error)',
+    color: '#991b1b',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    marginBottom: 'var(--space-4)',
+  },
+};

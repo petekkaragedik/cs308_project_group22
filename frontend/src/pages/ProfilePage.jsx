@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   User, Package, Lock, MapPin, LogOut, Camera, Trash2,
   Check, X, Mail, Eye, EyeOff, ChevronRight, Plus,
-  Truck, CheckCircle2, Clock, AlertCircle,
+  Truck, CheckCircle2, Clock, AlertCircle, LayoutDashboard,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -93,6 +93,7 @@ export default function ProfilePage() {
           email: data.email,
           phone: '',
           avatar: null,
+          role: data.role,
         });
         setLoading(false);
       })
@@ -159,6 +160,20 @@ export default function ProfilePage() {
             <SidebarTab icon={<Package size={18} />} label="Orders" active={tab === 'orders'} onClick={() => setTab('orders')} />
             <SidebarTab icon={<Lock size={18} />} label="Security" active={tab === 'security'} onClick={() => setTab('security')} />
             <SidebarTab icon={<MapPin size={18} />} label="Addresses" active={tab === 'addresses'} onClick={() => setTab('addresses')} />
+
+            {user?.role === 'product_manager' && (
+              <>
+                <div style={styles.sidebarDivider} />
+                <button
+                  className="pf-tab"
+                  style={styles.sidebarTab}
+                  onClick={() => navigate('/product-manager/dashboard')}
+                >
+                  <LayoutDashboard size={18} />
+                  <span>Manager Dashboard</span>
+                </button>
+              </>
+            )}
 
             <div style={styles.sidebarDivider} />
 

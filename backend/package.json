@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "jest --forceExit"
+    "test": "jest --forceExit",
+    "seed:test-users": "node -e \"const mysql=require('mysql2/promise');const fs=require('fs');require('dotenv').config();(async()=>{const db=await mysql.createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME,multipleStatements:true});const sql=fs.readFileSync('seed_test_users.sql','utf8');await db.query(sql);const[users]=await db.query(\\\"SELECT id,name,email,role FROM users WHERE email LIKE '%@test.com'\\\");console.log('✅ Test users created:');console.table(users);await db.end();})();\""
   },
   "keywords": [],
   "author": "",
