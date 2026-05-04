@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const productRoutes = require('./routes/products');
 
 const createOrderRoutes = require("./routes/orders");
+const createReturnRoutes = require("./routes/returns");
 
 const app = express();
 
@@ -963,6 +964,7 @@ app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'
 });
 
 app.use("/api/orders", createOrderRoutes(db, requireAuth));
+app.use("/api/returns", createReturnRoutes(db, requireAuth));
 
 if (require.main === module) {
   app.listen(3001, () => {
