@@ -46,16 +46,34 @@ async function setup() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS orders (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT,
       invoice_number VARCHAR(40) NOT NULL UNIQUE,
       customer_email VARCHAR(255) NOT NULL,
       customer_name VARCHAR(150) DEFAULT NULL,
       total_amount DECIMAL(14,2) NOT NULL,
       currency VARCHAR(3) NOT NULL DEFAULT 'TRY',
       status ENUM('processing', 'in_transit', 'delivered', 'cancelled') NOT NULL DEFAULT 'processing',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX idx_orders_user (user_id)
     )
   `);
   console.log('Orders table ready');
+
+  // Add user_id column if it doesn't exist (for existing databases)
+  try {
+    await db.execute(`
+      ALTER TABLE orders ADD COLUMN user_id INT AFTER id
+    `);
+    await db.execute(`
+      ALTER TABLE orders ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    `);
+    await db.execute(`
+      ALTER TABLE orders ADD INDEX idx_orders_user (user_id)
+    `);
+  } catch (e) {
+    // Column already exists, ignore error
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS order_items (
