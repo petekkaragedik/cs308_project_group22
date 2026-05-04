@@ -133,6 +133,23 @@ async function setup() {
   `);
   console.log('Comments table ready');
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS return_requests (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      order_id INT NOT NULL,
+      user_id INT NOT NULL,
+      reason TEXT DEFAULT NULL,
+      status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_return_requests_user (user_id),
+      INDEX idx_return_requests_order (order_id)
+    )
+  `);
+  console.log('Return requests table ready');
+
   await db.end();
 }
 
