@@ -12,6 +12,7 @@ const productRoutes = require('./routes/products');
 const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
 const createOrderRoutes = require("./routes/orders");
+const createReturnRoutes = require("./routes/returns");
 
 const app = express();
 
@@ -1227,6 +1228,7 @@ app.put("/api/product-manager/orders/:id/status", requireAuth, requireRole('prod
 });
 
 app.use("/api/orders", createOrderRoutes(db, requireAuth));
+app.use("/api/returns", createReturnRoutes(db, requireAuth));
 
 if (require.main === module) {
   app.listen(3001, () => {

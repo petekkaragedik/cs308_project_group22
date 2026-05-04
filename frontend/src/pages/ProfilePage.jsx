@@ -47,6 +47,8 @@ function initialsOf(name) {
     .toUpperCase();
 }
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 const ORDER_STEPS = ['processing', 'in-transit', 'delivered'];
 const STEP_LABELS = {
   'processing': 'Processing',
@@ -190,7 +192,7 @@ export default function ProfilePage() {
             {tab === 'profile' && (
               <ProfileSection user={user} setUser={setUser} onSaved={() => showToast('Profile updated')} />
             )}
-            {tab === 'orders' && <OrdersSection />}
+            {tab === 'orders' && <OrdersSection onNotify={showToast} />}
             {tab === 'security' && <SecuritySection email={user.email} onDone={showToast} />}
             {tab === 'addresses' && <AddressesSection onChanged={showToast} />}
           </main>
@@ -409,11 +411,12 @@ function ProfileSection({ user, setUser, onSaved }) {
 
 /* ─── Orders section ───────────────────────────────── */
 
-function OrdersSection() {
+function OrdersSection({ onNotify }) {
   const [view, setView] = useState('active');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [returnOrder, setReturnOrder] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -433,6 +436,12 @@ function OrdersSection() {
   useEffect(() => {
     load();
   }, []);
+
+  function markReturned(orderId) {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, returnRequested: true } : o))
+    );
+  }
 
   const active = orders.filter((o) => o.status !== 'delivered');
   const past = orders.filter((o) => o.status === 'delivered');
@@ -480,21 +489,43 @@ function OrdersSection() {
             />
           ) : (
             <div style={styles.orderList}>
-              {list.map((o) => <OrderCard key={o.id} order={o} />)}
+              {list.map((o) => (
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  onReturnRequest={() => setReturnOrder(o)}
+                />
+              ))}
             </div>
           )}
         </>
+      )}
+
+      {returnOrder && (
+        <ReturnRequestModal
+          order={returnOrder}
+          onClose={() => setReturnOrder(null)}
+          onSuccess={() => {
+            markReturned(returnOrder.id);
+            setReturnOrder(null);
+            onNotify?.('Return request submitted successfully');
+          }}
+        />
       )}
     </Card>
   );
 }
 
-function OrderCard({ order }) {
+function OrderCard({ order, onReturnRequest }) {
   const navigate = useNavigate();
   const stepIdx = ORDER_STEPS.indexOf(order.status);
   const goToInvoice = () => {
     if (order.orderId) navigate(`/invoice/${order.orderId}`);
   };
+  const withinWindow =
+    order.placedAt &&
+    Date.now() - new Date(order.placedAt).getTime() <= THIRTY_DAYS_MS;
+  const canReturn = order.status === 'delivered' && !order.returnRequested && withinWindow;
 
   return (
     <div style={styles.orderCard}>
@@ -571,12 +602,108 @@ function OrderCard({ order }) {
           ) : (
             <>
               <button className="pf-btn-ghost" style={styles.btnGhost} onClick={goToInvoice}>Invoice</button>
-              <button className="pf-btn-ghost" style={styles.btnGhost}>Request return</button>
+              {order.returnRequested ? (
+                <span style={styles.returnedBadge}>Return requested</span>
+              ) : canReturn ? (
+                <button className="pf-btn-ghost" style={styles.btnGhost} onClick={onReturnRequest}>
+                  Request return
+                </button>
+              ) : (
+                <button
+                  className="pf-btn-ghost"
+                  style={{ ...styles.btnGhost, opacity: 0.4, cursor: 'not-allowed' }}
+                  disabled
+                  title="Return window has expired (30 days)"
+                >
+                  Return expired
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Return request modal ─────────────────────────── */
+
+function ReturnRequestModal({ order, onClose, onSuccess }) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function submit() {
+    setErr(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/returns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          order_id: order.orderId,
+          reason: reason.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to submit return request');
+      onSuccess();
+    } catch (e) {
+      setErr(e.message || 'Failed to submit return request');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal onClose={submitting ? () => {} : onClose} wide>
+      <h2 style={styles.modalTitle}>Request return</h2>
+      <p style={styles.modalBody}>
+        Order #{order.id} · {formatPrice(order.total)}
+      </p>
+
+      <div style={{ marginTop: 'var(--space-5)' }}>
+        <Field label="Reason (optional)">
+          <textarea
+            className="pf-input"
+            style={{ ...styles.input, minHeight: 100, resize: 'vertical' }}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Describe why you'd like to return this order…"
+            disabled={submitting}
+          />
+        </Field>
+      </div>
+
+      {err && (
+        <div style={{ ...styles.errorBox, marginTop: 'var(--space-4)' }}>
+          <AlertCircle size={16} /> {err}
+        </div>
+      )}
+
+      <div style={styles.modalActions}>
+        <button
+          className="pf-btn-ghost"
+          style={styles.btnGhost}
+          onClick={onClose}
+          disabled={submitting}
+        >
+          Cancel
+        </button>
+        <button
+          className="pf-btn-primary"
+          style={{
+            ...styles.btnPrimary,
+            opacity: submitting ? 0.5 : 1,
+            cursor: submitting ? 'not-allowed' : 'pointer',
+          }}
+          disabled={submitting}
+          onClick={submit}
+        >
+          {submitting ? 'SUBMITTING…' : 'SUBMIT RETURN'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -1660,6 +1787,19 @@ const styles = {
     display: 'flex',
     gap: 'var(--space-2)',
     flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  returnedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: 'var(--space-2) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-sand)',
+    color: 'var(--color-charcoal-light)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
   },
 
   /* Addresses */
