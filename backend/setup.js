@@ -182,6 +182,13 @@ async function setup() {
   `);
   console.log('Return requests table ready');
 
+  try {
+    await db.execute(`ALTER TABLE return_requests ADD COLUMN refunded_amount DECIMAL(14,2) DEFAULT NULL`);
+  } catch (e) { /* column already exists */ }
+  try {
+    await db.execute(`ALTER TABLE return_requests ADD COLUMN refunded_at TIMESTAMP NULL DEFAULT NULL`);
+  } catch (e) { /* column already exists */ }
+
   await db.end();
 }
 
