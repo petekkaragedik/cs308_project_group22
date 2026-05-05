@@ -14,10 +14,12 @@ function getPostLoginTarget(search) {
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
   const location = useLocation();
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setError(null);
 
     fetch(apiUrl("/api/login"), {
       method: "POST",
@@ -30,12 +32,12 @@ function Login() {
           localStorage.setItem("token", data.token);
           window.location.href = getPostLoginTarget(location.search);
         } else {
-          alert("Invalid credentials");
+          setError(data.message || 'Invalid email or password.');
         }
       })
       .catch(err => {
         console.error(err);
-        alert("Error occurred");
+        setError('Something went wrong. Please try again.');
       });
   };
 
@@ -80,6 +82,8 @@ function Login() {
                 Forgot Password?
               </Link>
             </div>
+
+            {error && <p style={styles.errorBanner}>{error}</p>}
 
             <button type="submit" style={styles.button}>
               SIGN IN
@@ -195,6 +199,16 @@ const styles = {
     textDecoration: 'none',
     fontWeight: 'var(--weight-semibold)',
     borderBottom: '1px solid var(--color-charcoal)',
+  },
+  errorBanner: {
+    margin: 0,
+    padding: 'var(--space-3) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-error)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-black)',
+    textAlign: 'center',
   },
   forgotPassword: {
     textAlign: 'right',
