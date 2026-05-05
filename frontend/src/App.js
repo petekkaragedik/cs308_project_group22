@@ -14,6 +14,11 @@ import WishlistPage from './pages/WishlistPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminModerationPage from './pages/AdminModerationPage';
 import ProductManagerDashboardPage from './pages/ProductManagerDashboardPage';
+import SalesManagerDashboardPage from './pages/SalesManagerDashboardPage';
+import SalesManagerDiscountPage from './pages/SalesManagerDiscountPage';
+import SalesManagerInvoicePage from './pages/SalesManagerInvoicePage';
+import SalesManagerRevenuePage from './pages/SalesManagerRevenuePage';
+import SalesManagerRefundsPage from './pages/SalesManagerRefundsPage';
 import { CartProvider } from './context/CartContext';
 
 function App() {
@@ -35,6 +40,11 @@ function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/admin/moderation" element={<AdminModerationPage />} />
             <Route path="/product-manager/dashboard" element={<ProductManagerDashboardPage />} />
+            <Route path="/sales-manager/dashboard" element={<SalesManagerDashboardPage />} />
+            <Route path="/sales-manager/discounts" element={<SalesManagerDiscountPage />} />
+            <Route path="/sales-manager/invoices" element={<SalesManagerInvoicePage />} />
+            <Route path="/sales-manager/revenue" element={<SalesManagerRevenuePage />} />
+            <Route path="/sales-manager/refunds" element={<SalesManagerRefundsPage />} />
             <Route path="/" element={<LandingPage />} />
           </Routes>
         </div>
