@@ -2,7 +2,7 @@ const express = require('express');
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-module.exports = function createReturnRoutes(db, requireAuth) {
+module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
   const router = express.Router();
 
   /**
@@ -81,10 +81,27 @@ module.exports = function createReturnRoutes(db, requireAuth) {
 
   /**
    * GET /api/returns
-   * List all return requests for the authenticated user.
+   * - Sales manager: all pending return requests with customer + product info.
+   * - Customer: their own return requests.
    */
   router.get('/', requireAuth, async (req, res) => {
     try {
+      if (req.user.role === 'sales_manager') {
+        const [rows] = await db.query(
+          `SELECT rr.id, rr.order_id, rr.reason, rr.status, rr.created_at,
+                  o.customer_name, o.customer_email, o.total_amount, o.currency,
+                  GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR ', ') AS product_names
+           FROM return_requests rr
+           JOIN orders o ON o.id = rr.order_id
+           LEFT JOIN order_items oi ON oi.order_id = rr.order_id
+           WHERE rr.status = 'pending'
+           GROUP BY rr.id, rr.order_id, rr.reason, rr.status, rr.created_at,
+                    o.customer_name, o.customer_email, o.total_amount, o.currency
+           ORDER BY rr.created_at DESC`
+        );
+        return res.json(rows);
+      }
+
       const [rows] = await db.query(
         `SELECT rr.id, rr.order_id, rr.reason, rr.status, rr.created_at,
                 o.invoice_number, o.total_amount, o.currency
@@ -98,6 +115,68 @@ module.exports = function createReturnRoutes(db, requireAuth) {
     } catch (error) {
       console.error('Return requests fetch error:', error);
       return res.status(500).json({ message: 'Failed to fetch return requests' });
+    }
+  });
+
+  /**
+   * PATCH /api/returns/:id/approve
+   * Sales manager only — approve a pending return request.
+   */
+  router.patch('/:id/approve', requireAuth, requireRole('sales_manager'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ message: 'Invalid return request id' });
+    }
+    try {
+      const [existing] = await db.query(
+        'SELECT id, status FROM return_requests WHERE id = ?',
+        [id]
+      );
+      if (existing.length === 0) {
+        return res.status(404).json({ message: 'Return request not found' });
+      }
+      if (existing[0].status !== 'pending') {
+        return res.status(409).json({ message: 'Return request is no longer pending' });
+      }
+      await db.query(
+        "UPDATE return_requests SET status = 'approved' WHERE id = ?",
+        [id]
+      );
+      return res.json({ message: 'Return request approved', id, status: 'approved' });
+    } catch (error) {
+      console.error('Return approve error:', error);
+      return res.status(500).json({ message: 'Failed to approve return request' });
+    }
+  });
+
+  /**
+   * PATCH /api/returns/:id/reject
+   * Sales manager only — reject a pending return request.
+   */
+  router.patch('/:id/reject', requireAuth, requireRole('sales_manager'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      return res.status(400).json({ message: 'Invalid return request id' });
+    }
+    try {
+      const [existing] = await db.query(
+        'SELECT id, status FROM return_requests WHERE id = ?',
+        [id]
+      );
+      if (existing.length === 0) {
+        return res.status(404).json({ message: 'Return request not found' });
+      }
+      if (existing[0].status !== 'pending') {
+        return res.status(409).json({ message: 'Return request is no longer pending' });
+      }
+      await db.query(
+        "UPDATE return_requests SET status = 'rejected' WHERE id = ?",
+        [id]
+      );
+      return res.json({ message: 'Return request rejected', id, status: 'rejected' });
+    } catch (error) {
+      console.error('Return reject error:', error);
+      return res.status(500).json({ message: 'Failed to reject return request' });
     }
   });
 
