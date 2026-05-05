@@ -175,6 +175,20 @@ export default function ProfilePage() {
               </>
             )}
 
+            {user?.role === 'sales_manager' && (
+              <>
+                <div style={styles.sidebarDivider} />
+                <button
+                  className="pf-tab"
+                  style={styles.sidebarTab}
+                  onClick={() => navigate('/sales-manager/dashboard')}
+                >
+                  <LayoutDashboard size={18} />
+                  <span>Manager Dashboard</span>
+                </button>
+              </>
+            )}
+
             <div style={styles.sidebarDivider} />
 
             <button
