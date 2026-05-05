@@ -436,10 +436,24 @@ function OrdersSection({ onNotify }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/profile/orders', { headers: authHeaders() });
-      if (!res.ok) throw new Error(await parseError(res, 'Failed to load orders'));
-      const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      const [ordersRes, returnsRes] = await Promise.all([
+        fetch('/api/profile/orders', { headers: authHeaders() }),
+        fetch('/api/returns', { headers: authHeaders() }),
+      ]);
+      if (!ordersRes.ok) throw new Error(await parseError(ordersRes, 'Failed to load orders'));
+      const ordersData = await ordersRes.json();
+      const returnsData = returnsRes.ok ? await returnsRes.json() : [];
+
+      const returnsByOrderId = {};
+      for (const r of (Array.isArray(returnsData) ? returnsData : [])) {
+        returnsByOrderId[r.order_id] = r.status;
+      }
+
+      const merged = (Array.isArray(ordersData) ? ordersData : []).map((o) => ({
+        ...o,
+        returnStatus: returnsByOrderId[o.orderId] ?? null,
+      }));
+      setOrders(merged);
     } catch (err) {
       setError(err.message || 'Failed to load orders');
     } finally {
@@ -453,7 +467,7 @@ function OrdersSection({ onNotify }) {
 
   function markReturned(orderId) {
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, returnRequested: true } : o))
+      prev.map((o) => (o.orderId === orderId ? { ...o, returnStatus: 'pending' } : o))
     );
   }
 
@@ -520,7 +534,7 @@ function OrdersSection({ onNotify }) {
           order={returnOrder}
           onClose={() => setReturnOrder(null)}
           onSuccess={() => {
-            markReturned(returnOrder.id);
+            markReturned(returnOrder.orderId);
             setReturnOrder(null);
             onNotify?.('Return request submitted successfully');
           }}
@@ -539,7 +553,7 @@ function OrderCard({ order, onReturnRequest }) {
   const withinWindow =
     order.placedAt &&
     Date.now() - new Date(order.placedAt).getTime() <= THIRTY_DAYS_MS;
-  const canReturn = order.status === 'delivered' && !order.returnRequested && withinWindow;
+  const canReturn = order.status === 'delivered' && !order.returnStatus && withinWindow;
 
   return (
     <div style={styles.orderCard}>
@@ -616,8 +630,12 @@ function OrderCard({ order, onReturnRequest }) {
           ) : (
             <>
               <button className="pf-btn-ghost" style={styles.btnGhost} onClick={goToInvoice}>Invoice</button>
-              {order.returnRequested ? (
+              {order.returnStatus === 'pending' ? (
                 <span style={styles.returnedBadge}>Return requested</span>
+              ) : order.returnStatus === 'approved' ? (
+                <span style={styles.returnApprovedBadge}>Return approved</span>
+              ) : order.returnStatus === 'rejected' ? (
+                <span style={styles.returnRejectedBadge}>Return rejected</span>
               ) : canReturn ? (
                 <button className="pf-btn-ghost" style={styles.btnGhost} onClick={onReturnRequest}>
                   Request return
@@ -1811,6 +1829,30 @@ const styles = {
     border: '1px solid var(--color-border)',
     backgroundColor: 'var(--color-sand)',
     color: 'var(--color-charcoal-light)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+  },
+  returnApprovedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: 'var(--space-2) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-success)',
+    backgroundColor: 'var(--color-success)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+  },
+  returnRejectedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: 'var(--space-2) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-error)',
+    backgroundColor: 'var(--color-error)',
+    color: 'var(--color-black)',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
     fontWeight: 'var(--weight-medium)',

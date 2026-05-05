@@ -89,13 +89,14 @@ module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
       if (req.user.role === 'sales_manager') {
         const [rows] = await db.query(
           `SELECT rr.id, rr.order_id, rr.reason, rr.status, rr.created_at,
+                  rr.refunded_amount, rr.refunded_at,
                   o.customer_name, o.customer_email, o.total_amount, o.currency,
                   GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR ', ') AS product_names
            FROM return_requests rr
            JOIN orders o ON o.id = rr.order_id
            LEFT JOIN order_items oi ON oi.order_id = rr.order_id
-           WHERE rr.status = 'pending'
            GROUP BY rr.id, rr.order_id, rr.reason, rr.status, rr.created_at,
+                    rr.refunded_amount, rr.refunded_at,
                     o.customer_name, o.customer_email, o.total_amount, o.currency
            ORDER BY rr.created_at DESC`
         );
@@ -121,31 +122,68 @@ module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
   /**
    * PATCH /api/returns/:id/approve
    * Sales manager only — approve a pending return request.
+   * Restocks each ordered product and records the refund amount (purchase-time price).
    */
   router.patch('/:id/approve', requireAuth, requireRole('sales_manager'), async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id < 1) {
       return res.status(400).json({ message: 'Invalid return request id' });
     }
+
+    const conn = await db.getConnection();
     try {
-      const [existing] = await db.query(
-        'SELECT id, status FROM return_requests WHERE id = ?',
+      await conn.beginTransaction();
+
+      const [[returnReq]] = await conn.query(
+        'SELECT id, status, order_id FROM return_requests WHERE id = ? FOR UPDATE',
         [id]
       );
-      if (existing.length === 0) {
+      if (!returnReq) {
+        await conn.rollback();
         return res.status(404).json({ message: 'Return request not found' });
       }
-      if (existing[0].status !== 'pending') {
+      if (returnReq.status !== 'pending') {
+        await conn.rollback();
         return res.status(409).json({ message: 'Return request is no longer pending' });
       }
-      await db.query(
-        "UPDATE return_requests SET status = 'approved' WHERE id = ?",
-        [id]
+
+      const [[order]] = await conn.query(
+        'SELECT total_amount FROM orders WHERE id = ?',
+        [returnReq.order_id]
       );
-      return res.json({ message: 'Return request approved', id, status: 'approved' });
+
+      const [items] = await conn.query(
+        'SELECT product_id, quantity FROM order_items WHERE order_id = ?',
+        [returnReq.order_id]
+      );
+
+      for (const item of items) {
+        await conn.query(
+          'UPDATE products SET quantityInStock = quantityInStock + ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        );
+      }
+
+      await conn.query(
+        `UPDATE return_requests
+         SET status = 'approved', refunded_amount = ?, refunded_at = NOW()
+         WHERE id = ?`,
+        [order.total_amount, id]
+      );
+
+      await conn.commit();
+      return res.json({
+        message: 'Return request approved',
+        id,
+        status: 'approved',
+        refunded_amount: order.total_amount,
+      });
     } catch (error) {
+      await conn.rollback();
       console.error('Return approve error:', error);
       return res.status(500).json({ message: 'Failed to approve return request' });
+    } finally {
+      conn.release();
     }
   });
 
