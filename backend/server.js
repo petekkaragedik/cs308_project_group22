@@ -13,6 +13,7 @@ const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
 const createOrderRoutes = require("./routes/orders");
 const createReturnRoutes = require("./routes/returns");
+const { encrypt, decrypt } = require("./utils/encrypt");
 
 const app = express();
 
@@ -35,22 +36,30 @@ const db = mysql.createPool({
 let addressesTableReady = null;
 function ensureAddressesTable() {
   if (!addressesTableReady) {
-    addressesTableReady = db.query(`
-      CREATE TABLE IF NOT EXISTS addresses (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        label VARCHAR(50) NOT NULL,
-        recipient VARCHAR(150) NOT NULL,
-        line1 VARCHAR(255) NOT NULL,
-        city VARCHAR(100) NOT NULL,
-        postal VARCHAR(20) DEFAULT NULL,
-        country VARCHAR(100) NOT NULL DEFAULT 'Türkiye',
-        is_default TINYINT(1) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_addresses_user (user_id)
-      )
-    `).catch((err) => {
+    addressesTableReady = (async () => {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS addresses (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          label VARCHAR(50) NOT NULL,
+          recipient VARCHAR(512) NOT NULL,
+          line1 VARCHAR(1024) NOT NULL,
+          city VARCHAR(512) NOT NULL,
+          postal VARCHAR(256) DEFAULT NULL,
+          country VARCHAR(100) NOT NULL DEFAULT 'Türkiye',
+          is_default TINYINT(1) NOT NULL DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          INDEX idx_addresses_user (user_id)
+        )
+      `);
+      // Migration: widen encrypted columns on existing installs.
+      // Encrypted output (IV + tag + hex ciphertext) is far longer than plaintext.
+      await db.query("ALTER TABLE addresses MODIFY recipient VARCHAR(512) NOT NULL");
+      await db.query("ALTER TABLE addresses MODIFY line1 VARCHAR(1024) NOT NULL");
+      await db.query("ALTER TABLE addresses MODIFY city VARCHAR(512) NOT NULL");
+      await db.query("ALTER TABLE addresses MODIFY postal VARCHAR(256) DEFAULT NULL");
+    })().catch((err) => {
       addressesTableReady = null;
       throw err;
     });
@@ -370,10 +379,10 @@ function mapAddress(row) {
   return {
     id: row.id,
     label: row.label,
-    recipient: row.recipient,
-    line1: row.line1,
-    city: row.city,
-    postal: row.postal || '',
+    recipient: decrypt(row.recipient),
+    line1: decrypt(row.line1),
+    city: decrypt(row.city),
+    postal: decrypt(row.postal) || '',
     country: row.country,
     isDefault: !!row.is_default,
   };
@@ -458,10 +467,10 @@ app.post("/api/profile/addresses", requireAuth, async (req, res) => {
       [
         req.user.id,
         data.label,
-        data.recipient,
-        data.line1,
-        data.city,
-        data.postal || null,
+        encrypt(data.recipient),
+        encrypt(data.line1),
+        encrypt(data.city),
+        data.postal ? encrypt(data.postal) : null,
         data.country,
         makeDefault ? 1 : 0,
       ]
@@ -525,10 +534,10 @@ app.put("/api/profile/addresses/:id", requireAuth, async (req, res) => {
        WHERE id = ? AND user_id = ?`,
       [
         data.label,
-        data.recipient,
-        data.line1,
-        data.city,
-        data.postal || null,
+        encrypt(data.recipient),
+        encrypt(data.line1),
+        encrypt(data.city),
+        data.postal ? encrypt(data.postal) : null,
         data.country,
         makeDefault ? 1 : 0,
         id,
