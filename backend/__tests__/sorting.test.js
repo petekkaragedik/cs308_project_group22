@@ -53,11 +53,11 @@ describe("GET /api/products sorting", () => {
     );
   });
 
-  it("sort=popularity returns 200 and response body is an array", async () => {
+  it("sort=popularity returns 200 and sorts by average rating", async () => {
     mockQuery.mockResolvedValueOnce([
       [
-        { id: "p1", name: "Popular", popularity: 99, images: "[]" },
-        { id: "p2", name: "Meh",     popularity: 5,  images: "[]" },
+        { id: "p1", name: "Top Rated", avg_rating: 4.8, images: "[]" },
+        { id: "p2", name: "Mid Rated", avg_rating: 3.2, images: "[]" },
       ],
     ]);
 
@@ -65,8 +65,9 @@ describe("GET /api/products sorting", () => {
 
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    expect(mockQuery).toHaveBeenCalledWith(
-      "SELECT * FROM products ORDER BY popularity DESC"
-    );
+    const [calledQuery] = mockQuery.mock.calls[0];
+    expect(calledQuery).toMatch(/LEFT JOIN ratings/i);
+    expect(calledQuery).toMatch(/AVG\(r\.rating\)/i);
+    expect(calledQuery).toMatch(/ORDER BY avg_rating DESC/i);
   });
 });

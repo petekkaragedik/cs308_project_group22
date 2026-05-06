@@ -657,13 +657,23 @@ app.get("/api/products", async (req, res) => {
     const { sort } = req.query;
 
     // Sort modes: price_asc = cheapest first, price_desc = most expensive first,
-    // popularity = most popular first (by popularity integer field); default = no ordering.
-    let orderClause = "";
-    if (sort === "price_asc") orderClause = " ORDER BY price ASC";
-    else if (sort === "price_desc") orderClause = " ORDER BY price DESC";
-    else if (sort === "popularity") orderClause = " ORDER BY popularity DESC";
+    // popularity = highest average rating first; default = no ordering.
+    let query;
+    if (sort === "price_asc") {
+      query = "SELECT * FROM products ORDER BY price ASC";
+    } else if (sort === "price_desc") {
+      query = "SELECT * FROM products ORDER BY price DESC";
+    } else if (sort === "popularity") {
+      query = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
+               FROM products p
+               LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
+               ON r.product_id = p.id
+               ORDER BY avg_rating DESC`;
+    } else {
+      query = "SELECT * FROM products";
+    }
 
-    const [rows] = await db.query(`SELECT * FROM products${orderClause}`);
+    const [rows] = await db.query(query);
 
     const formattedRows = rows.map(product => {
       return {
@@ -685,15 +695,23 @@ app.get("/api/products/category/:categoryName", async (req, res) => {
     const { sort } = req.query;
 
     // Reuse the same three sort modes as /api/products
-    let orderClause = "";
-    if (sort === "price_asc") orderClause = " ORDER BY price ASC";
-    else if (sort === "price_desc") orderClause = " ORDER BY price DESC";
-    else if (sort === "popularity") orderClause = " ORDER BY popularity DESC";
+    let query;
+    if (sort === "price_asc") {
+      query = "SELECT * FROM products WHERE categoryName = ? ORDER BY price ASC";
+    } else if (sort === "price_desc") {
+      query = "SELECT * FROM products WHERE categoryName = ? ORDER BY price DESC";
+    } else if (sort === "popularity") {
+      query = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
+               FROM products p
+               LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
+               ON r.product_id = p.id
+               WHERE p.categoryName = ?
+               ORDER BY avg_rating DESC`;
+    } else {
+      query = "SELECT * FROM products WHERE categoryName = ?";
+    }
 
-    const [rows] = await db.query(
-      `SELECT * FROM products WHERE categoryName = ?${orderClause}`,
-      [categoryName]
-    );
+    const [rows] = await db.query(query, [categoryName]);
 
     const formattedRows = rows.map(product => ({
       ...product,
