@@ -335,10 +335,11 @@ app.get("/api/profile/orders", requireAuth, async (req, res) => {
 
     const orderIds = orderRows.map((o) => o.id);
     const [itemRows] = await db.query(
-      `SELECT order_id, product_id, product_name, size, quantity, unit_price, line_total
-       FROM order_items
-       WHERE order_id IN (?)
-       ORDER BY id`,
+      `SELECT oi.order_id, oi.product_id, oi.product_name, oi.size, oi.quantity, oi.unit_price, oi.line_total, p.color
+       FROM order_items oi
+       LEFT JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id IN (?)
+       ORDER BY oi.id`,
       [orderIds]
     );
 
@@ -348,6 +349,7 @@ app.get("/api/profile/orders", requireAuth, async (req, res) => {
       itemsByOrder.get(it.order_id).push({
         id: it.product_id,
         name: it.product_name,
+        color: it.color || null,
         size: it.size,
         qty: it.quantity,
         price: Number(it.unit_price),

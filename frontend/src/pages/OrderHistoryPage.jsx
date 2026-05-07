@@ -189,6 +189,7 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
             {itemCount === 0 ? '—' : (
               <>
                 <Link to={`/products/${firstItem.id}`} style={styles.itemLink}>{firstItem.name}</Link>
+                {firstItem.color ? <span style={styles.metaColor}> · {firstItem.color}</span> : null}
                 {itemCount > 1 && ` + ${itemCount - 1} more`}
               </>
             )}
@@ -261,6 +262,7 @@ const styles = {
   btnPrimary: { padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-charcoal, #374151)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
   returnHint: { fontSize: 'var(--text-xs, 0.75rem)', color: 'var(--color-charcoal-light, #6b7280)' },
   itemLink: { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--color-border, #e5e7eb)' },
+  metaColor: { color: 'var(--color-charcoal-light, #6b7280)', fontSize: 'var(--text-xs, 0.75rem)' },
 
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '60px 0', color: 'var(--color-charcoal-light, #9ca3af)' },
   emptyText: { fontSize: 'var(--text-sm, 0.875rem)', margin: 0 },
