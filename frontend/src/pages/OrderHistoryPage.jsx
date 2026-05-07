@@ -38,14 +38,13 @@ export default function OrderHistoryPage() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!localStorage.getItem('token')) {
       navigate('/login');
       return;
     }
     load();
-  }, []);
+  }, [navigate]);
 
   async function load() {
     setLoading(true);
