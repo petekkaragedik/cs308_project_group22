@@ -952,6 +952,24 @@ app.get("/api/products/:productId/ratings", async (req, res) => {
   }
 });
 
+// GET /api/products/:productId/can-review — authenticated: did the user receive a delivered order containing this product?
+app.get("/api/products/:productId/can-review", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT 1 FROM orders o
+       JOIN order_items oi ON oi.order_id = o.id
+       WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'delivered'
+       LIMIT 1`,
+      [req.user.id, productId]
+    );
+    return res.json({ canReview: rows.length > 0 });
+  } catch (error) {
+    console.error("Can review check error:", error);
+    res.status(500).json({ message: "Failed to check purchase status" });
+  }
+});
+
 // POST /api/products/:productId/comments — submit a comment (pending approval)
 app.post("/api/products/:productId/comments", requireAuth, async (req, res) => {
   const { productId } = req.params;
@@ -970,6 +988,17 @@ app.post("/api/products/:productId/comments", requireAuth, async (req, res) => {
     const [productRows] = await db.query("SELECT id FROM products WHERE id = ?", [productId]);
     if (productRows.length === 0) {
       return res.status(404).json({ message: "Product not found" });
+    }
+
+    const [purchaseRows] = await db.query(
+      `SELECT 1 FROM orders o
+       JOIN order_items oi ON oi.order_id = o.id
+       WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'delivered'
+       LIMIT 1`,
+      [req.user.id, productId]
+    );
+    if (purchaseRows.length === 0) {
+      return res.status(403).json({ message: "You must purchase this product before commenting on it" });
     }
 
     const [result] = await db.query(

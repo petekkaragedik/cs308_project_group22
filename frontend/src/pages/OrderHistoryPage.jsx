@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Package, Clock, Truck, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -187,7 +187,12 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
         <div style={styles.metaItem}>
           <p style={styles.cardLabel}>Items</p>
           <p style={styles.metaValue}>
-            {itemCount === 0 ? '—' : itemCount === 1 ? firstItem.name : `${firstItem.name} + ${itemCount - 1} more`}
+            {itemCount === 0 ? '—' : (
+              <>
+                <Link to={`/products/${firstItem.id}`} style={styles.itemLink}>{firstItem.name}</Link>
+                {itemCount > 1 && ` + ${itemCount - 1} more`}
+              </>
+            )}
           </p>
         </div>
         <div style={{ ...styles.metaItem, textAlign: 'right' }}>
@@ -209,7 +214,7 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
       {/* Actions */}
       <div style={styles.cardActions}>
         <button style={styles.btnPrimary} onClick={onViewInvoice}>
-          {order.status === 'delivered' ? 'View Invoice' : 'Track Order'}
+          {order.status === 'delivered' ? 'View Details' : 'Track Order'}
         </button>
         {canReturn && (
           <span style={styles.returnHint}>Return available</span>
@@ -256,6 +261,7 @@ const styles = {
   cardActions: { display: 'flex', alignItems: 'center', gap: 'var(--space-3, 0.75rem)' },
   btnPrimary: { padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-charcoal, #374151)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
   returnHint: { fontSize: 'var(--text-xs, 0.75rem)', color: 'var(--color-charcoal-light, #6b7280)' },
+  itemLink: { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--color-border, #e5e7eb)' },
 
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '60px 0', color: 'var(--color-charcoal-light, #9ca3af)' },
   emptyText: { fontSize: 'var(--text-sm, 0.875rem)', margin: 0 },
