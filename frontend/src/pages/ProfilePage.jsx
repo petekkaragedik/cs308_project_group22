@@ -157,7 +157,7 @@ export default function ProfilePage() {
           {/* Sidebar */}
           <aside style={styles.sidebar} className="pf-sidebar">
             <SidebarTab icon={<User size={18} />} label="Profile" active={tab === 'profile'} onClick={() => setTab('profile')} />
-            <SidebarTab icon={<Package size={18} />} label="Orders" active={tab === 'orders'} onClick={() => setTab('orders')} />
+            <SidebarTab icon={<Package size={18} />} label="Orders" active={false} onClick={() => navigate('/orders')} />
             <SidebarTab icon={<Lock size={18} />} label="Security" active={tab === 'security'} onClick={() => setTab('security')} />
             <SidebarTab icon={<MapPin size={18} />} label="Addresses" active={tab === 'addresses'} onClick={() => setTab('addresses')} />
 

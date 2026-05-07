@@ -19,6 +19,7 @@ import SalesManagerDiscountPage from './pages/SalesManagerDiscountPage';
 import SalesManagerInvoicePage from './pages/SalesManagerInvoicePage';
 import SalesManagerRevenuePage from './pages/SalesManagerRevenuePage';
 import SalesManagerRefundsPage from './pages/SalesManagerRefundsPage';
+import OrderHistoryPage from './pages/OrderHistoryPage';
 import { CartProvider } from './context/CartContext';
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
             <Route path="/invoice/:orderId" element={<InvoicePage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/orders" element={<OrderHistoryPage />} />
             <Route path="/admin/moderation" element={<AdminModerationPage />} />
             <Route path="/product-manager/dashboard" element={<ProductManagerDashboardPage />} />
             <Route path="/sales-manager/dashboard" element={<SalesManagerDashboardPage />} />
