@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
+import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, ZoomIn, Lock } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
@@ -366,6 +366,9 @@ export default function ProductDetailPage() {
   const [ratingStats, setRatingStats] = useState({ average: 0, count: 0 });
   const [approvedReviews, setApprovedReviews] = useState([]);
 
+  /* ── Verified purchase gate (null = loading, true/false = resolved) ── */
+  const [canReview, setCanReview] = useState(null);
+
   const loadReviews = useCallback(async () => {
     if (!id) return;
     try {
@@ -390,6 +393,18 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => { loadReviews(); }, [loadReviews]);
+
+  useEffect(() => {
+    if (!id) return;
+    const token = localStorage.getItem('token');
+    if (!token) { setCanReview(false); return; }
+    fetch(apiUrl(`/api/products/${id}/can-review`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.ok ? res.json() : { canReview: false })
+      .then((data) => setCanReview(data.canReview === true))
+      .catch(() => setCanReview(false));
+  }, [id]);
 
   function addToast(message) {
     const tid = Date.now();
@@ -808,53 +823,69 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Leave a review form */}
-          <div style={styles.reviewForm}>
-            <p style={styles.sectionLabel}>Leave a Review</p>
+          {/* Leave a review form — star rating open to all, comment gated to verified purchasers */}
+          {canReview !== null && (
+            <div style={styles.reviewForm}>
+              <p style={styles.sectionLabel}>Leave a Review</p>
 
-            {/* Star picker */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
-              {[1, 2, 3, 4, 5].map((n) => {
-                const filled = n <= (reviewHover || reviewRating);
-                return (
-                  <Star
-                    key={n}
-                    size={24}
-                    className="pdp-review-star"
-                    fill={filled ? '#FBBF24' : 'none'}
-                    stroke={filled ? '#FBBF24' : 'var(--color-border)'}
-                    style={{ cursor: 'pointer', transition: 'fill var(--transition-fast)' }}
-                    onMouseEnter={() => setReviewHover(n)}
-                    onMouseLeave={() => setReviewHover(0)}
-                    onClick={() => setReviewRating(n)}
-                  />
-                );
-              })}
+              {/* Star picker — always available */}
+              <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
+                {[1, 2, 3, 4, 5].map((n) => {
+                  const filled = n <= (reviewHover || reviewRating);
+                  return (
+                    <Star
+                      key={n}
+                      size={24}
+                      className="pdp-review-star"
+                      fill={filled ? '#FBBF24' : 'none'}
+                      stroke={filled ? '#FBBF24' : 'var(--color-border)'}
+                      style={{ cursor: 'pointer', transition: 'fill var(--transition-fast)' }}
+                      onMouseEnter={() => setReviewHover(n)}
+                      onMouseLeave={() => setReviewHover(0)}
+                      onClick={() => setReviewRating(n)}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Comment textarea — verified purchasers only */}
+              {canReview === true ? (
+                <textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  placeholder="Share your thoughts..."
+                  rows={4}
+                  style={styles.textarea}
+                />
+              ) : (
+                <div style={styles.reviewLocked}>
+                  <Lock size={18} color="var(--color-charcoal-light)" />
+                  <p style={styles.reviewLockedText}>
+                    {localStorage.getItem('token') ? (
+                      'Purchase and receive this product to leave a written comment.'
+                    ) : (
+                      <><Link to={`/login?next=/products/${id}`} style={styles.reviewLockedLink}>Sign in</Link> and purchase this product to leave a comment.</>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmitReview}
+                disabled={reviewSubmitting}
+                style={{
+                  ...styles.submitReviewBtn,
+                  opacity: reviewSubmitting ? 0.6 : 1,
+                  cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {reviewSubmitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
+              </button>
+              <p style={styles.reviewNotice}>
+                Ratings are open to all. Comments require a verified purchase and will be visible after approval.
+              </p>
             </div>
-
-            <textarea
-              value={reviewText}
-              onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Share your thoughts..."
-              rows={4}
-              style={styles.textarea}
-            />
-
-            <button
-              onClick={handleSubmitReview}
-              disabled={reviewSubmitting}
-              style={{
-                ...styles.submitReviewBtn,
-                opacity: reviewSubmitting ? 0.6 : 1,
-                cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {reviewSubmitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
-            </button>
-            <p style={styles.reviewNotice}>
-              Your review will be visible after approval by our team
-            </p>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1362,6 +1393,26 @@ const styles = {
     color: 'var(--color-charcoal-light)',
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  reviewLocked: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 'var(--space-3)',
+    padding: 'var(--space-4)',
+    backgroundColor: 'var(--color-sand)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+  },
+  reviewLockedText: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+    lineHeight: 1.5,
+  },
+  reviewLockedLink: {
+    color: 'var(--color-charcoal)',
+    textDecoration: 'underline',
   },
   submitReviewBtn: {
     alignSelf: 'flex-start',
