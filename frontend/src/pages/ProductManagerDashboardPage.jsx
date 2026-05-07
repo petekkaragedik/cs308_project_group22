@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../apiBase';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -358,7 +358,9 @@ export default function ProductManagerDashboardPage() {
                   <tbody>
                     {products.map((p) => (
                       <tr key={p.id} style={styles.tr}>
-                        <td style={styles.td}>{p.name}</td>
+                        <td style={styles.td}>
+                          <Link to={`/products/${p.id}`} style={styles.productLink}>{p.name}</Link>
+                        </td>
                         <td style={styles.td}>{p.model || '-'}</td>
                         <td style={styles.td}>{p.categoryName || '-'}</td>
                         <td style={styles.td}>₺{Number(p.price).toFixed(2)}</td>
@@ -658,6 +660,11 @@ const styles = {
     padding: 'var(--space-3) var(--space-4)',
     fontSize: 'var(--text-sm)',
     color: 'var(--color-charcoal)',
+  },
+  productLink: {
+    color: 'inherit',
+    textDecoration: 'underline',
+    textDecorationColor: 'var(--color-border)',
   },
   stockInput: {
     width: '80px',
