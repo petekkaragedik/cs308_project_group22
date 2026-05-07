@@ -230,10 +230,20 @@ export default function ProductListingPage() {
   }, [activeCategory, sortBy]);
 
   useEffect(() => {
-    function onScroll() { setShowScrollTop(window.scrollY > 300); }
+    function onScroll() {
+      setShowScrollTop(window.scrollY > 300);
+      sessionStorage.setItem('scylla_scroll', String(window.scrollY));
+    }
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      const saved = sessionStorage.getItem('scylla_scroll');
+      if (saved) window.scrollTo(0, Number(saved));
+    }
+  }, [loading]);
 
   function addToast() {
     const id = Date.now();
