@@ -35,6 +35,7 @@ function buildPayloadFromRows(orderRow, itemRows) {
     lines: itemRows.map((i) => ({
       productId: i.product_id,
       productName: i.product_name,
+      color: i.color || null,
       size: i.size,
       quantity: i.quantity,
       unitPrice: Number(i.unit_price),
@@ -154,7 +155,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
 
       const [orderRows] = await db.query('SELECT * FROM orders WHERE id = ?', [orderId]);
       const [itemRows] = await db.query(
-        'SELECT * FROM order_items WHERE order_id = ? ORDER BY id',
+        `SELECT oi.*, p.color FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
         [orderId]
       );
       const orderRow = orderRows[0];
@@ -239,7 +240,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
         return res.status(404).json({ message: 'Order not found' });
       }
       const [itemRows] = await db.query(
-        'SELECT * FROM order_items WHERE order_id = ? ORDER BY id',
+        `SELECT oi.*, p.color FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
         [orderId]
       );
       const payload = buildPayloadFromRows(orderRows[0], itemRows);
@@ -266,7 +267,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
         return res.status(404).json({ message: 'Order not found' });
       }
       const [itemRows] = await db.query(
-        'SELECT * FROM order_items WHERE order_id = ? ORDER BY id',
+        `SELECT oi.*, p.color FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
         [orderId]
       );
       const o = orderRows[0];

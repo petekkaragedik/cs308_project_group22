@@ -203,7 +203,10 @@ export default function InvoicePage() {
                         <Link to={`/products/${line.productId}`} style={styles.itemLink}>
                           {line.productName}
                         </Link>
-                        <span style={styles.dim}> · Size {line.size}</span>
+                        <span style={styles.dim}>
+                          {' · Size '}{line.size}
+                          {line.color ? ` · ${line.color}` : ''}
+                        </span>
                       </td>
                       <td style={styles.tdRight}>{line.quantity}</td>
                       <td style={styles.tdRight}>{formatMoney(line.unitPrice)}</td>
