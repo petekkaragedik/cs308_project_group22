@@ -153,7 +153,7 @@ function StarRow({ rating, size = 16 }) {
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const { addItem, cartItems } = useCart();
 
   const [product, setProduct] = useState(null);
   const [modelProducts, setModelProducts] = useState([]);
@@ -243,6 +243,15 @@ export default function ProductDetailPage() {
   const mouseStartX = useRef(null);
   const wasDrag = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  /* Current quantity in cart for selected product + size */
+  const cartQuantity = useMemo(() => {
+    if (!product || !selectedSize) return 0;
+    const item = cartItems.find(
+      (i) => i.product_id === product.id && i.size === selectedSize
+    );
+    return item ? item.quantity : 0;
+  }, [cartItems, product, selectedSize]);
 
   const goTo = useCallback((i) => {
     setActiveImage(i);
@@ -390,7 +399,9 @@ export default function ProductDetailPage() {
 
   function handleAddToCart() {
     if (!selectedSize || totalStock === 0) return;
-    addItem(product.id, selectedSize);
+    const availableStock = stockBySize[selectedSize] ?? 0;
+    if (cartQuantity >= availableStock) return;
+    addItem(product.id, selectedSize, availableStock);
     setCartAdded(true);
     addToast('Added to cart!');
     setTimeout(() => setCartAdded(false), 1500);
@@ -677,7 +688,7 @@ export default function ProductDetailPage() {
             {/* ADD TO CART */}
             <button
               className="pdp-cart-btn"
-              disabled={!selectedSize || !inStock || cartAdded}
+              disabled={!selectedSize || !inStock || cartAdded || (selectedSize && cartQuantity >= (stockBySize[selectedSize] ?? 0))}
               onClick={handleAddToCart}
               style={{
                 ...styles.cartBtn,
@@ -687,7 +698,9 @@ export default function ProductDetailPage() {
                     ? styles.cartBtnDisabled
                     : !selectedSize
                       ? styles.cartBtnNoSize
-                      : {}),
+                      : selectedSize && cartQuantity >= (stockBySize[selectedSize] ?? 0)
+                        ? styles.cartBtnDisabled
+                        : {}),
               }}
             >
               {cartAdded
@@ -696,7 +709,9 @@ export default function ProductDetailPage() {
                   ? 'OUT OF STOCK'
                   : !selectedSize
                     ? 'SELECT A SIZE'
-                    : 'ADD TO CART'}
+                    : selectedSize && cartQuantity >= (stockBySize[selectedSize] ?? 0)
+                      ? 'MAX QUANTITY REACHED'
+                      : 'ADD TO CART'}
             </button>
 
             {/* WISHLIST */}
