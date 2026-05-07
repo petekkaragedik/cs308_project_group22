@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "@getbrevo/brevo": "^5.0.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
