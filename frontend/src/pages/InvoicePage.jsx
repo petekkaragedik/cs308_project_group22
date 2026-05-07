@@ -200,7 +200,9 @@ export default function InvoicePage() {
                   {data.lines.map((line, i) => (
                     <tr key={i}>
                       <td style={styles.td}>
-                        {line.productName}
+                        <Link to={`/products/${line.productId}`} style={styles.itemLink}>
+                          {line.productName}
+                        </Link>
                         <span style={styles.dim}> · Size {line.size}</span>
                       </td>
                       <td style={styles.tdRight}>{line.quantity}</td>
@@ -391,6 +393,12 @@ const styles = {
   dim: {
     color: 'var(--color-charcoal)',
     fontSize: 'var(--text-xs)',
+  },
+  itemLink: {
+    color: 'inherit',
+    textDecoration: 'underline',
+    textDecorationColor: 'var(--color-border)',
+    fontFamily: 'var(--font-body)',
   },
   grandTotal: {
     textAlign: 'right',

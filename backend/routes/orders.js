@@ -33,6 +33,7 @@ function buildPayloadFromRows(orderRow, itemRows) {
     currency: orderRow.currency || 'TRY',
     total: Number(orderRow.total_amount),
     lines: itemRows.map((i) => ({
+      productId: i.product_id,
       productName: i.product_name,
       size: i.size,
       quantity: i.quantity,
