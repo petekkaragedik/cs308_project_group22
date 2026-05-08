@@ -7,7 +7,7 @@ import Footer from '../components/Footer';
 /* ─── Helpers ──────────────────────────────────────── */
 
 function authHeaders() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -39,7 +39,7 @@ export default function OrderHistoryPage() {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    if (!localStorage.getItem('token')) {
+    if (!sessionStorage.getItem('token')) {
       navigate('/login');
       return;
     }

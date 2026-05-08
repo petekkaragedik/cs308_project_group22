@@ -12,7 +12,7 @@ const STATUS_TABS = [
 ];
 
 function authHeaders() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -39,7 +39,7 @@ export default function AdminModerationPage() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate('/login?next=/admin/moderation');
       return;

@@ -11,7 +11,7 @@ import Footer from '../components/Footer';
 /* ─── Helpers ──────────────────────────────────────── */
 
 function authHeaders() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -69,7 +69,7 @@ export default function ProfilePage() {
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate('/login');
       return;
@@ -80,7 +80,7 @@ export default function ProfilePage() {
     })
       .then((res) => {
         if (res.status === 401) {
-          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
           navigate('/login');
           throw new Error('auth');
         }
@@ -109,7 +109,7 @@ export default function ProfilePage() {
   }
 
   function handleLogout() {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     navigate('/login');
   }
 
@@ -290,7 +290,7 @@ function ProfileSection({ user, setUser, onSaved }) {
     setSaving(true);
     try {
       if (nameChanged) {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const res = await fetch('/api/profile', {
           method: 'PUT',
           headers: {

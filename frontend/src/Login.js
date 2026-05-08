@@ -29,7 +29,7 @@ function Login() {
       .then(res => res.json())
       .then(data => {
         if (data.token) {
-          localStorage.setItem("token", data.token);
+          sessionStorage.setItem("token", data.token);
           window.location.href = getPostLoginTarget(location.search);
         } else {
           setError(data.message || 'Invalid email or password.');

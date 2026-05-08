@@ -1143,7 +1143,7 @@ app.get("/api/product-manager/dashboard-summary", requireAuth, requireRole('prod
 app.get("/api/product-manager/stock-overview", requireAuth, requireRole('product_manager'), async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT id, name, model, quantityInStock, price, categoryName
+      SELECT id, name, model, quantityInStock, price, categoryName, color
       FROM products
       ORDER BY quantityInStock ASC, name ASC
     `);

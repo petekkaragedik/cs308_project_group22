@@ -30,7 +30,7 @@ export default function Navbar() {
   return (
     <>
       <nav style={styles.navbar}>
-        <Link to="/products" style={styles.navBrand}>SCYLLA</Link>
+        <Link to="/" style={styles.navBrand}>SCYLLA</Link>
         <div style={styles.navIcons}>
           <button
             style={styles.iconBtn}
@@ -51,7 +51,7 @@ export default function Navbar() {
             )}
           </Link>
           <Link
-            to={localStorage.getItem('token') ? '/profile' : '/login'}
+            to={sessionStorage.getItem('token') ? '/profile' : '/login'}
             style={styles.iconBtn}
             aria-label="Account"
           >

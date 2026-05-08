@@ -19,7 +19,7 @@ export default function WishlistPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       setLoading(false);
       setError('auth');

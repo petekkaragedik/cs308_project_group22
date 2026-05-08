@@ -318,7 +318,7 @@ export default function ProductDetailPage() {
 
   /* Load initial wishlist state for this product */
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token || !id) { setWishlisted(false); return; }
     fetch('/api/favorites', { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : []))
@@ -329,7 +329,7 @@ export default function ProductDetailPage() {
   }, [id]);
 
   const toggleWishlist = useCallback(async () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate('/login');
       return;
@@ -396,7 +396,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) { setCanReview(false); return; }
     fetch(apiUrl(`/api/products/${id}/can-review`), {
       headers: { Authorization: `Bearer ${token}` },
@@ -423,7 +423,7 @@ export default function ProductDetailPage() {
   }
 
   async function handleSubmitReview() {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate(`/login?next=/products/${id}`);
       return;
@@ -861,7 +861,7 @@ export default function ProductDetailPage() {
                 <div style={styles.reviewLocked}>
                   <Lock size={18} color="var(--color-charcoal-light)" />
                   <p style={styles.reviewLockedText}>
-                    {localStorage.getItem('token') ? (
+                    {sessionStorage.getItem('token') ? (
                       'Purchase and receive this product to leave a written comment.'
                     ) : (
                       <><Link to={`/login?next=/products/${id}`} style={styles.reviewLockedLink}>Sign in</Link> and purchase this product to leave a comment.</>
