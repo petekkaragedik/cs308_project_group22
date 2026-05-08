@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Login from './Login';
 import Register from './Registration';
 import ForgotPassword from './ForgotPassword';
@@ -22,10 +22,41 @@ import SalesManagerRefundsPage from './pages/SalesManagerRefundsPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import { CartProvider } from './context/CartContext';
 
+const PAGE_TITLES = {
+  '/': 'Scylla',
+  '/login': 'Scylla | Login',
+  '/register': 'Scylla | Register',
+  '/forgot-password': 'Scylla | Forgot Password',
+  '/reset-password': 'Scylla | Reset Password',
+  '/products': 'Scylla | Products',
+  '/cart': 'Scylla | Cart',
+  '/checkout': 'Scylla | Checkout',
+  '/wishlist': 'Scylla | Wishlist',
+  '/profile': 'Scylla | Profile',
+  '/orders': 'Scylla | Orders',
+  '/admin/moderation': 'Scylla | Moderation',
+  '/product-manager/dashboard': 'Scylla | PM Dashboard',
+  '/sales-manager/dashboard': 'Scylla | SM Dashboard',
+  '/sales-manager/discounts': 'Scylla | Discounts',
+  '/sales-manager/invoices': 'Scylla | Invoices',
+  '/sales-manager/revenue': 'Scylla | Revenue',
+  '/sales-manager/refunds': 'Scylla | Refunds',
+};
+
+function PageTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const base = '/' + pathname.split('/')[1];
+    document.title = PAGE_TITLES[pathname] ?? PAGE_TITLES[base] ?? 'Scylla';
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <CartProvider>
       <Router>
+        <PageTitle />
         <div style={{ margin: 0, padding: 0 }}>
           <Routes>
             <Route path="/login" element={<Login />} />

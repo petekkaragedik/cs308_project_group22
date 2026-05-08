@@ -17,7 +17,7 @@ function formatPrice(price) {
 }
 
 function authHeaders() {
-  const t = localStorage.getItem('token');
+  const t = sessionStorage.getItem('token');
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
@@ -32,7 +32,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!localStorage.getItem('token')) {
+    if (!sessionStorage.getItem('token')) {
       navigate('/login?next=/checkout', { replace: true });
     }
   }, [navigate]);

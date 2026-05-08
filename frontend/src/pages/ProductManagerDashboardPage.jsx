@@ -18,7 +18,7 @@ const ORDER_STATUS_FILTERS = [
 ];
 
 function authHeaders() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -99,7 +99,7 @@ export default function ProductManagerDashboardPage() {
   const [commentBusyId, setCommentBusyId] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate('/login?next=/product-manager/dashboard');
       return;
@@ -403,6 +403,7 @@ export default function ProductManagerDashboardPage() {
                       <th style={styles.th}>Product</th>
                       <th style={styles.th}>Model</th>
                       <th style={styles.th}>Category</th>
+                      <th style={styles.th}>Color</th>
                       <th style={styles.th}>Price (TRY)</th>
                       <th style={styles.th}>Stock</th>
                       <th style={styles.th}>Status</th>
@@ -417,6 +418,7 @@ export default function ProductManagerDashboardPage() {
                         </td>
                         <td style={styles.td}>{p.model || '-'}</td>
                         <td style={styles.td}>{p.categoryName || '-'}</td>
+                        <td style={styles.td}>{p.color || '-'}</td>
                         <td style={styles.td}>₺{Number(p.price).toFixed(2)}</td>
                         <td style={styles.td}>
                           {editingStockId === p.id ? (

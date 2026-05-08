@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 function authHeaders() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -22,7 +22,7 @@ export default function SalesManagerRefundsPage() {
   const [actionError, setActionError] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       navigate('/login?next=/sales-manager/refunds');
       return;
