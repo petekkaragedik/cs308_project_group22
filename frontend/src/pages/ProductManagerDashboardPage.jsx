@@ -93,6 +93,11 @@ export default function ProductManagerDashboardPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('processing');
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
+  // Comment moderation state
+  const [commentStatus, setCommentStatus] = useState('pending');
+  const [comments, setComments] = useState([]);
+  const [commentBusyId, setCommentBusyId] = useState(null);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -143,6 +148,25 @@ export default function ProductManagerDashboardPage() {
     }
   }, []);
 
+  const loadComments = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const url = commentStatus === 'all'
+        ? apiUrl('/api/admin/comments')
+        : apiUrl(`/api/admin/comments?status=${encodeURIComponent(commentStatus)}`);
+      const res = await fetch(url, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setComments(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError('Could not load comments. Please try again.');
+      setComments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [commentStatus]);
+
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -165,8 +189,9 @@ export default function ProductManagerDashboardPage() {
       loadSummary();
       if (activeTab === 'stock') loadProducts();
       if (activeTab === 'deliveries') loadOrders();
+      if (activeTab === 'comments') loadComments();
     }
-  }, [authState, activeTab, loadSummary, loadProducts, loadOrders]);
+  }, [authState, activeTab, loadSummary, loadProducts, loadOrders, loadComments]);
 
   async function updateStock(productId, newStock) {
     try {
@@ -228,6 +253,28 @@ export default function ProductManagerDashboardPage() {
     }
   }
 
+  async function actOnComment(id, action) {
+    setCommentBusyId(id);
+    setError('');
+    try {
+      const isDelete = action === 'delete';
+      const url = isDelete
+        ? apiUrl(`/api/admin/comments/${id}`)
+        : apiUrl(`/api/admin/comments/${id}/${action}`);
+      const res = await fetch(url, {
+        method: isDelete ? 'DELETE' : 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadComments();
+      await loadSummary();
+    } catch (e) {
+      setError(`Failed to ${action} comment.`);
+    } finally {
+      setCommentBusyId(null);
+    }
+  }
+
   function getNextStatuses(currentStatus) {
     const statusFlow = {
       'processing': ['in_transit', 'cancelled'],
@@ -279,6 +326,13 @@ export default function ProductManagerDashboardPage() {
         .stock-cancel-btn:hover { background-color: var(--color-error) !important; }
         .status-update-btn:hover:not(:disabled) { background-color: var(--color-blue) !important; color: var(--color-white) !important; }
         .status-update-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mod-tab { cursor: pointer; }
+        .mod-tab:hover { background-color: var(--color-blue) !important; }
+        .mod-tab.active { background-color: var(--color-charcoal) !important; color: var(--color-sand) !important; }
+        .mod-approve:hover:not(:disabled) { background-color: var(--color-success) !important; }
+        .mod-reject:hover:not(:disabled) { background-color: var(--color-warning) !important; }
+        .mod-delete:hover:not(:disabled) { background-color: var(--color-error) !important; }
+        .mod-approve:disabled, .mod-reject:disabled, .mod-delete:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
 
       <Navbar />
@@ -504,23 +558,108 @@ export default function ProductManagerDashboardPage() {
 
         {/* Comment Moderation Tab */}
         {activeTab === 'comments' && (
-          <div style={styles.moderationLink}>
-            <p style={styles.moderationText}>
-              Manage customer comments and reviews
-            </p>
-            <button
-              style={styles.moderationBtn}
-              onClick={() => navigate('/admin/moderation')}
-            >
-              Go to Comment Moderation
-            </button>
-          </div>
+          <>
+            <div style={styles.filterTabs}>
+              {[
+                { key: 'pending', label: 'Pending' },
+                { key: 'approved', label: 'Approved' },
+                { key: 'rejected', label: 'Rejected' },
+                { key: 'all', label: 'All' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  className={`mod-tab${commentStatus === t.key ? ' active' : ''}`}
+                  style={styles.filterTab}
+                  onClick={() => setCommentStatus(t.key)}
+                >
+                  {t.label}
+                  {t.key === 'pending' && summary?.pending_comments > 0 && (
+                    <span style={styles.badge}>{summary.pending_comments}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {loading ? (
+              <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
+            ) : comments.length === 0 ? (
+              <div style={styles.empty}>No comments in this category.</div>
+            ) : (
+              <div style={styles.list}>
+                {comments.map((c) => (
+                  <div key={c.id} style={styles.card}>
+                    <div style={styles.commentCardHeader}>
+                      <div style={styles.commentMeta}>
+                        <span style={styles.commentUser}>{c.user_name || `User #${c.user_id}`}</span>
+                        <span style={styles.commentMetaSep}>·</span>
+                        <span style={styles.commentMuted}>{c.user_email}</span>
+                      </div>
+                      <span style={commentStatusBadge(c.status)}>{c.status}</span>
+                    </div>
+                    <div style={styles.commentProductLine}>
+                      Product: <span style={styles.commentProductId}>{c.product_id}</span>
+                    </div>
+                    <p style={styles.commentBody}>{c.body}</p>
+                    <div style={styles.commentFooter}>
+                      <span style={styles.commentDate}>{formatDate(c.created_at)}</span>
+                      <div style={styles.commentActions}>
+                        {c.status !== 'approved' && (
+                          <button
+                            className="mod-approve"
+                            style={styles.stockBtn}
+                            disabled={commentBusyId === c.id}
+                            onClick={() => actOnComment(c.id, 'approve')}
+                          >
+                            {commentBusyId === c.id ? '...' : 'Approve'}
+                          </button>
+                        )}
+                        {c.status !== 'rejected' && (
+                          <button
+                            className="mod-reject"
+                            style={styles.stockBtn}
+                            disabled={commentBusyId === c.id}
+                            onClick={() => actOnComment(c.id, 'reject')}
+                          >
+                            {commentBusyId === c.id ? '...' : 'Reject'}
+                          </button>
+                        )}
+                        <button
+                          className="mod-delete"
+                          style={styles.stockBtn}
+                          disabled={commentBusyId === c.id}
+                          onClick={() => actOnComment(c.id, 'delete')}
+                        >
+                          {commentBusyId === c.id ? '...' : 'Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
       <Footer />
     </>
   );
+}
+
+function commentStatusBadge(s) {
+  const base = {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--color-black)',
+  };
+  if (s === 'approved') return { ...base, backgroundColor: 'var(--color-success)' };
+  if (s === 'rejected') return { ...base, backgroundColor: 'var(--color-error)' };
+  return { ...base, backgroundColor: 'var(--color-warning)' };
 }
 
 const styles = {
@@ -778,29 +917,67 @@ const styles = {
     cursor: 'pointer',
     transition: 'background-color var(--transition-fast), color var(--transition-fast)',
   },
-  moderationLink: {
-    textAlign: 'center',
-    padding: 'var(--space-10) 0',
+  commentCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 'var(--space-2)',
+    gap: 'var(--space-3)',
+    flexWrap: 'wrap',
   },
-  moderationText: {
+  commentMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    flexWrap: 'wrap',
+  },
+  commentUser: {
+    fontFamily: 'var(--font-body)',
+    fontWeight: 'var(--weight-semibold)',
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-black)',
+  },
+  commentMetaSep: { color: 'var(--color-charcoal-light)' },
+  commentMuted: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+  },
+  commentProductLine: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal-light)',
+    marginBottom: 'var(--space-3)',
+  },
+  commentProductId: {
+    color: 'var(--color-charcoal)',
+    fontWeight: 'var(--weight-medium)',
+  },
+  commentBody: {
+    margin: 0,
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-base)',
     color: 'var(--color-charcoal)',
-    marginBottom: 'var(--space-4)',
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap',
   },
-  moderationBtn: {
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-md)',
-    padding: 'var(--space-3) var(--space-6)',
-    backgroundColor: 'var(--color-charcoal)',
-    color: 'var(--color-sand)',
+  commentFooter: {
+    marginTop: 'var(--space-4)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    flexWrap: 'wrap',
+  },
+  commentDate: {
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-semibold)',
-    letterSpacing: 'var(--tracking-wide)',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-    transition: 'background-color var(--transition-fast)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal-light)',
+  },
+  commentActions: {
+    display: 'flex',
+    gap: 'var(--space-2)',
+    flexWrap: 'wrap',
   },
   empty: {
     padding: 'var(--space-10) 0',
