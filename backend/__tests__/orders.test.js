@@ -1,4 +1,4 @@
-const { roundMoney, buildPayloadFromRows, mapCheckoutError } = require("./orders");
+const { roundMoney, buildPayloadFromRows, mapCheckoutError } = require("../routes/orders");
 
 describe("orders helpers - unit tests", () => {
   describe("roundMoney", () => {

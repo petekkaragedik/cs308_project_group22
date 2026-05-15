@@ -19,7 +19,7 @@ jest.mock("bcryptjs", () => ({
 const request = require("supertest");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
-const app = require("./server");
+const app = require("../server");
 
 const mockQuery = mysql.__mockQuery;
 

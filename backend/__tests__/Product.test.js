@@ -1,4 +1,4 @@
-const Product = require("./Product");
+const Product = require("../models/Product");
 
 describe("Product model - unit tests", () => {
   const base = { id: "p1", model: "wave-runner" };

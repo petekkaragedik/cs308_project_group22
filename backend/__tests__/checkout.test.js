@@ -26,19 +26,19 @@ jest.mock("mysql2/promise", () => {
   };
 });
 
-jest.mock("./services/invoicePdf", () => ({
+jest.mock("../services/invoicePdf", () => ({
   generateInvoicePdfBuffer: jest.fn(),
 }));
 
-jest.mock("./services/mailInvoice", () => ({
+jest.mock("../services/mailInvoice", () => ({
   sendInvoiceEmail: jest.fn(),
 }));
 
 const request = require("supertest");
 const mysql = require("mysql2/promise");
-const { generateInvoicePdfBuffer } = require("./services/invoicePdf");
-const { sendInvoiceEmail } = require("./services/mailInvoice");
-const app = require("./server");
+const { generateInvoicePdfBuffer } = require("../services/invoicePdf");
+const { sendInvoiceEmail } = require("../services/mailInvoice");
+const app = require("../server");
 
 const mockQuery = mysql.__mockQuery;
 const mockConnQuery = mysql.__mockConnQuery;

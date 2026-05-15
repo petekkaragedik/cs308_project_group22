@@ -37,17 +37,17 @@ jest.mock("mysql2/promise", () => {
   };
 });
 
-jest.mock("./services/invoicePdf", () => ({
+jest.mock("../services/invoicePdf", () => ({
   generateInvoicePdfBuffer: jest.fn().mockResolvedValue(Buffer.from("pdf")),
 }));
-jest.mock("./services/mailInvoice", () => ({
+jest.mock("../services/mailInvoice", () => ({
   sendInvoiceEmail: jest.fn().mockResolvedValue({ sent: true }),
 }));
 
 const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const mysql = require("mysql2/promise");
-const app = require("./server");
+const app = require("../server");
 
 const mockQuery = mysql.__mockQuery;
 const mockConnQuery = mysql.__mockConnQuery;
