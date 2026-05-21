@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, Camera } from 'lucide-react';
 
 const LENS_W = 200;
 const LENS_H = 200;
@@ -102,7 +102,11 @@ export default function ImageCarousel({ images = [], initialIndex = 0, onImageCl
     touchStartX.current = null;
   }, [goNext, goPrev]);
 
-  if (!images.length) return null;
+  if (!images.length) return (
+    <div style={styles.placeholder}>
+      <Camera size={48} color="var(--color-border)" />
+    </div>
+  );
 
   const showZoom = isHovering && !isDragging;
 
@@ -212,6 +216,16 @@ export default function ImageCarousel({ images = [], initialIndex = 0, onImageCl
 }
 
 const styles = {
+  placeholder: {
+    width: '100%',
+    aspectRatio: '3 / 4',
+    borderRadius: 'var(--radius-xl)',
+    backgroundColor: 'var(--color-sand)',
+    border: '1px solid var(--color-border)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   zoomWrapper: {
     position: 'relative',
   },
