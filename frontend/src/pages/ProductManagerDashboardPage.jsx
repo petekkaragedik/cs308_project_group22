@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 import { apiUrl } from '../apiBase';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -98,6 +99,13 @@ export default function ProductManagerDashboardPage() {
   const [comments, setComments] = useState([]);
   const [commentBusyId, setCommentBusyId] = useState(null);
 
+  // Stock alerts state
+  const [stockAlerts, setStockAlerts] = useState({ outOfStock: [], lowStock: [], totalAlerts: 0 });
+  const [stockAlertsLoading, setStockAlertsLoading] = useState(false);
+  const [stockAlertsError, setStockAlertsError] = useState('');
+  const [outOfStockExpanded, setOutOfStockExpanded] = useState(false);
+  const [lowStockExpanded, setLowStockExpanded] = useState(false);
+
   useEffect(() => {
     const token = sessionStorage.getItem('token');
     if (!token) {
@@ -184,6 +192,25 @@ export default function ProductManagerDashboardPage() {
     }
   }, [orderStatusFilter]);
 
+  const loadStockAlerts = useCallback(async () => {
+    setStockAlertsLoading(true);
+    setStockAlertsError('');
+    try {
+      const res = await fetch(apiUrl('/api/admin/stock-alerts'), { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setStockAlerts({
+        outOfStock: Array.isArray(data.outOfStock) ? data.outOfStock : [],
+        lowStock: Array.isArray(data.lowStock) ? data.lowStock : [],
+        totalAlerts: typeof data.totalAlerts === 'number' ? data.totalAlerts : 0,
+      });
+    } catch {
+      setStockAlertsError('Could not load stock alerts.');
+    } finally {
+      setStockAlertsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (authState === 'authorized') {
       loadSummary();
@@ -192,6 +219,12 @@ export default function ProductManagerDashboardPage() {
       if (activeTab === 'comments') loadComments();
     }
   }, [authState, activeTab, loadSummary, loadProducts, loadOrders, loadComments]);
+
+  useEffect(() => {
+    if (authState === 'authorized') {
+      loadStockAlerts();
+    }
+  }, [authState, loadStockAlerts]);
 
   async function updateStock(productId, newStock) {
     try {
@@ -333,6 +366,9 @@ export default function ProductManagerDashboardPage() {
         .mod-reject:hover:not(:disabled) { background-color: var(--color-warning) !important; }
         .mod-delete:hover:not(:disabled) { background-color: var(--color-error) !important; }
         .mod-approve:disabled, .mod-reject:disabled, .mod-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+        @keyframes pm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .alerts-skeleton { animation: pm-pulse 1.5s ease-in-out infinite; }
+        .alerts-expand-btn:hover { text-decoration: underline; }
       `}</style>
 
       <Navbar />
@@ -346,6 +382,10 @@ export default function ProductManagerDashboardPage() {
         {/* Summary Cards */}
         {summary && (
           <div style={styles.summaryGrid}>
+            <div style={styles.summaryCard}>
+              <div style={styles.summaryLabel}>Total Products</div>
+              <div style={styles.summaryValue}>{summary.total_products || 0}</div>
+            </div>
             <div style={styles.summaryCard}>
               <div style={styles.summaryLabel}>Pending Comments</div>
               <div style={styles.summaryValue}>{summary.pending_comments || 0}</div>
@@ -379,11 +419,97 @@ export default function ProductManagerDashboardPage() {
               onClick={() => setActiveTab(t.key)}
             >
               {t.label}
+              {t.key === 'stock' && stockAlerts.totalAlerts > 0 && (
+                <span style={styles.alertBadge}>{stockAlerts.totalAlerts}</span>
+              )}
               {t.key === 'comments' && summary?.pending_comments > 0 && (
                 <span style={styles.badge}>{summary.pending_comments}</span>
               )}
             </button>
           ))}
+        </div>
+
+        {/* Stock Alerts Section */}
+        <div style={styles.alertsSection}>
+          <div style={styles.alertsSectionHeader}>
+            <AlertTriangle size={18} color="var(--color-charcoal)" />
+            <span style={styles.alertsSectionTitle}>Stock Alerts</span>
+          </div>
+
+          {stockAlertsLoading ? (
+            <div className="alerts-skeleton" style={styles.alertsSkeleton} />
+          ) : stockAlertsError ? (
+            <div style={styles.alertsInlineError}>{stockAlertsError}</div>
+          ) : stockAlerts.totalAlerts === 0 ? (
+            <div style={styles.alertsAllGood}>
+              <CheckCircle size={16} color="var(--color-charcoal)" style={{ opacity: 0.6, flexShrink: 0 }} />
+              <span>All products are well-stocked</span>
+            </div>
+          ) : (
+            <>
+              {stockAlerts.outOfStock.length > 0 && (
+                <div style={styles.alertsGroup}>
+                  <div style={styles.alertsSubHeaderOut}>Out of Stock</div>
+                  {(outOfStockExpanded ? stockAlerts.outOfStock : stockAlerts.outOfStock.slice(0, 5)).map((p) => (
+                    <div key={p.productId} style={styles.alertRowOut}>
+                      {p.firstImage && (
+                        <img src={p.firstImage} alt="" style={styles.alertThumb} />
+                      )}
+                      <div style={styles.alertRowMain}>
+                        <Link to={`/products/${p.productId}`} style={styles.alertProductName}>{p.name}</Link>
+                        <span style={styles.alertProductModel}>{p.model}</span>
+                      </div>
+                      <div style={styles.alertRowMeta}>
+                        <span style={styles.alertCategoryPill}>{p.categoryName || '—'}</span>
+                        <span style={styles.alertStockBadgeOut}>OUT OF STOCK</span>
+                        <span style={styles.alertPrice}>₺{Number(p.price).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {stockAlerts.outOfStock.length > 5 && (
+                    <button
+                      className="alerts-expand-btn"
+                      style={styles.alertsExpandBtn}
+                      onClick={() => setOutOfStockExpanded((v) => !v)}
+                    >
+                      {outOfStockExpanded ? 'Show less' : `Show ${stockAlerts.outOfStock.length - 5} more`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {stockAlerts.lowStock.length > 0 && (
+                <div style={styles.alertsGroup}>
+                  <div style={styles.alertsSubHeaderLow}>Low Stock (≤5 remaining)</div>
+                  {(lowStockExpanded ? stockAlerts.lowStock : stockAlerts.lowStock.slice(0, 5)).map((p) => (
+                    <div key={p.productId} style={styles.alertRowLow}>
+                      {p.firstImage && (
+                        <img src={p.firstImage} alt="" style={styles.alertThumb} />
+                      )}
+                      <div style={styles.alertRowMain}>
+                        <Link to={`/products/${p.productId}`} style={styles.alertProductName}>{p.name}</Link>
+                        <span style={styles.alertProductModel}>{p.model}</span>
+                      </div>
+                      <div style={styles.alertRowMeta}>
+                        <span style={styles.alertCategoryPill}>{p.categoryName || '—'}</span>
+                        <span style={styles.alertStockBadgeLow}>{p.quantityInStock} left</span>
+                        <span style={styles.alertPrice}>₺{Number(p.price).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {stockAlerts.lowStock.length > 5 && (
+                    <button
+                      className="alerts-expand-btn"
+                      style={styles.alertsExpandBtn}
+                      onClick={() => setLowStockExpanded((v) => !v)}
+                    >
+                      {lowStockExpanded ? 'Show less' : `Show ${stockAlerts.lowStock.length - 5} more`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
@@ -414,7 +540,12 @@ export default function ProductManagerDashboardPage() {
                     {products.map((p) => (
                       <tr key={p.id} style={styles.tr}>
                         <td style={styles.td}>
-                          <Link to={`/products/${p.id}`} style={styles.productLink}>{p.name}</Link>
+                          <div style={styles.stockProductCell}>
+                            {p.firstImage && (
+                              <img src={p.firstImage} alt="" style={styles.alertThumb} />
+                            )}
+                            <Link to={`/products/${p.id}`} style={styles.productLink}>{p.name}</Link>
+                          </div>
                         </td>
                         <td style={styles.td}>{p.model || '-'}</td>
                         <td style={styles.td}>{p.categoryName || '-'}</td>
@@ -751,6 +882,173 @@ const styles = {
     fontWeight: 'var(--weight-bold)',
     letterSpacing: 'var(--tracking-normal)',
   },
+  alertBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 18,
+    height: 18,
+    padding: '0 4px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-error, #e53e3e)',
+    color: '#ffffff',
+    fontFamily: 'var(--font-body)',
+    fontSize: '11px',
+    fontWeight: 'var(--weight-bold)',
+    letterSpacing: 'var(--tracking-normal)',
+  },
+  alertsSection: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-xl)',
+    padding: '1.5rem',
+    boxShadow: 'var(--shadow-sm)',
+    marginBottom: 'var(--space-6)',
+  },
+  alertsSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-4)',
+  },
+  alertsSectionTitle: {
+    fontFamily: 'var(--font-heading)',
+    fontWeight: 'var(--weight-regular)',
+    fontSize: 'var(--text-xl)',
+    color: 'var(--color-black)',
+    margin: 0,
+  },
+  alertsSkeleton: {
+    backgroundColor: 'var(--color-sand)',
+    borderRadius: 'var(--radius-sm)',
+    height: 80,
+  },
+  alertsInlineError: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    opacity: 0.7,
+  },
+  alertsAllGood: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    opacity: 0.6,
+  },
+  alertsGroup: {
+    marginBottom: 'var(--space-4)',
+  },
+  alertsSubHeaderOut: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    color: 'var(--color-error)',
+    marginBottom: 'var(--space-2)',
+  },
+  alertsSubHeaderLow: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    color: 'var(--color-warning)',
+    marginBottom: 'var(--space-2)',
+  },
+  alertRowOut: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--space-4)',
+    flexWrap: 'wrap',
+    padding: 'var(--space-3) var(--space-4)',
+    backgroundColor: 'rgba(229, 62, 62, 0.06)',
+    borderBottom: '1px solid var(--color-border)',
+  },
+  alertRowLow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--space-4)',
+    flexWrap: 'wrap',
+    padding: 'var(--space-3) var(--space-4)',
+    backgroundColor: 'rgba(236, 153, 75, 0.06)',
+    borderBottom: '1px solid var(--color-border)',
+  },
+  alertThumb: {
+    width: 36,
+    height: 44,
+    objectFit: 'cover',
+    borderRadius: 'var(--radius-sm)',
+    flexShrink: 0,
+  },
+  alertRowMain: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-1)',
+    flex: 1,
+    minWidth: 0,
+  },
+  alertProductName: {
+    fontFamily: 'var(--font-body)',
+    fontWeight: 'var(--weight-medium)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+  },
+  alertProductModel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    opacity: 0.6,
+  },
+  alertRowMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    flexWrap: 'wrap',
+    flexShrink: 0,
+  },
+  alertCategoryPill: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal)',
+    backgroundColor: 'var(--color-sand)',
+    borderRadius: 'var(--radius-full)',
+    padding: '2px var(--space-2)',
+  },
+  alertStockBadgeOut: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-bold)',
+    color: 'var(--color-error)',
+  },
+  alertStockBadgeLow: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-bold)',
+    color: '#D97706',
+  },
+  alertPrice: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    textAlign: 'right',
+  },
+  alertsExpandBtn: {
+    display: 'block',
+    background: 'none',
+    border: 'none',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    opacity: 0.6,
+    cursor: 'pointer',
+    padding: '0.5rem 0',
+    textDecoration: 'none',
+  },
   filterTabs: {
     display: 'flex',
     gap: 'var(--space-2)',
@@ -806,6 +1104,11 @@ const styles = {
     color: 'inherit',
     textDecoration: 'underline',
     textDecorationColor: 'var(--color-border)',
+  },
+  stockProductCell: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
   },
   stockInput: {
     width: '80px',
