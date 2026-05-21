@@ -1,11 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, ChevronUp, CheckCheck, SlidersHorizontal } from 'lucide-react';
+import { ShoppingCart, ChevronUp, CheckCheck, SlidersHorizontal, Heart } from 'lucide-react';
 import FilterPanel from '../components/FilterPanel';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import Pagination from '../components/Pagination';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { apiUrl } from '../apiBase';
 
 /* ─── Constants ───────────────────────────────────────── */
@@ -187,6 +188,7 @@ function buildSizeStockMap(products) {
 export default function ProductListingPage() {
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -388,6 +390,7 @@ export default function ProductListingPage() {
           .plp-sidebar { display: none !important; }
           .plp-mobile-toggle-area { display: block; margin-bottom: var(--space-4); }
         }
+        .plp-heart-btn:hover { border-color: var(--color-blue) !important; background-color: var(--color-sand) !important; }
       `}</style>
 
       <Navbar />
@@ -610,6 +613,12 @@ export default function ProductListingPage() {
                   }}
                   sizeMap={sizeMap}
                   sizeStockMap={sizeStockMap}
+                  wishlisted={isWishlisted(card.id)}
+                  onToggleWishlist={() => {
+                    const token = sessionStorage.getItem('token');
+                    if (!token) { navigate('/login'); return; }
+                    toggleWishlist(card.id);
+                  }}
                 />
               ))}
             </div>
@@ -653,7 +662,7 @@ export default function ProductListingPage() {
 
 /* ─── Product Card ────────────────────────────────────── */
 
-function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap }) {
+function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap, wishlisted, onToggleWishlist }) {
   const [hovered, setHovered] = useState(false);
   const [selectedSize, setSelectedSize] = useState(null);
   const [added, setAdded] = useState(false);
@@ -720,6 +729,22 @@ function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap }) {
         <span style={{ ...styles.badge, ...(inStock ? styles.badgeIn : styles.badgeOut) }}>
           {inStock ? 'IN STOCK' : 'OUT OF STOCK'}
         </span>
+        <button
+          className="plp-heart-btn"
+          style={{
+            ...styles.heartBtn,
+            borderColor: wishlisted ? 'var(--color-blue)' : 'var(--color-border)',
+          }}
+          onClick={(e) => { e.stopPropagation(); onToggleWishlist(); }}
+          aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+          title={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+        >
+          <Heart
+            size={14}
+            fill={wishlisted ? 'var(--color-blue-hover)' : 'none'}
+            stroke={wishlisted ? 'var(--color-blue-hover)' : 'var(--color-charcoal)'}
+          />
+        </button>
       </div>
 
       {/* Body */}
@@ -1327,6 +1352,25 @@ const styles = {
     objectFit: 'cover',
     borderRadius: 'var(--radius-2xl)',
     display: 'block',
+  },
+
+  /* Wishlist heart button on card */
+  heartBtn: {
+    position: 'absolute',
+    top: 'var(--space-3)',
+    right: 'var(--space-3)',
+    width: 28,
+    height: 28,
+    borderRadius: 'var(--radius-full)',
+    border: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-white)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'border-color var(--transition-fast), background-color var(--transition-fast)',
+    padding: 0,
+    flexShrink: 0,
   },
 
   /* Scroll to top */

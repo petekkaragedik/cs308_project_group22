@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ImageCarousel from '../components/ImageCarousel';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { apiUrl } from '../apiBase';
 
 /* ─── Color map ───────────────────────────────────────── */
@@ -155,6 +156,7 @@ export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem, cartItems } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
 
   const [product, setProduct] = useState(null);
   const [modelProducts, setModelProducts] = useState([]);
@@ -228,7 +230,6 @@ export default function ProductDetailPage() {
   /* ── Local state ── */
   const [selectedSize, setSelectedSize] = useState(null);
   const [cartAdded, setCartAdded] = useState(false);
-  const [wishlisted, setWishlisted] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -256,45 +257,13 @@ export default function ProductDetailPage() {
   /* Reset state + scroll to top when navigating between variants */
   useEffect(() => { setSelectedSize(null); window.scrollTo({ top: 0, behavior: 'instant' }); }, [id]);
 
-  /* Load initial wishlist state for this product */
-  useEffect(() => {
-    const token = sessionStorage.getItem('token');
-    if (!token || !id) { setWishlisted(false); return; }
-    fetch('/api/favorites', { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((favs) => {
-        setWishlisted(Array.isArray(favs) && favs.some((p) => String(p.id) === String(id)));
-      })
-      .catch(() => {});
-  }, [id]);
+  const wishlisted = isWishlisted(id);
 
-  const toggleWishlist = useCallback(async () => {
+  const handleToggleWishlist = useCallback(async () => {
     const token = sessionStorage.getItem('token');
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    const next = !wishlisted;
-    setWishlisted(next);
-    try {
-      const res = await fetch(
-        next ? '/api/favorites' : `/api/favorites/${id}`,
-        {
-          method: next ? 'POST' : 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: next ? JSON.stringify({ product_id: id }) : undefined,
-        }
-      );
-      if (!res.ok && res.status !== 409 && res.status !== 404) {
-        setWishlisted(!next);
-      }
-    } catch {
-      setWishlisted(!next);
-    }
-  }, [wishlisted, id, navigate]);
+    if (!token) { navigate('/login'); return; }
+    await toggleWishlist(id);
+  }, [id, toggleWishlist, navigate]);
 
   /* ── Review form state ── */
   const [reviewRating, setReviewRating] = useState(0);
@@ -602,7 +571,7 @@ export default function ProductDetailPage() {
             {/* WISHLIST */}
             <button
               className="pdp-wishlist-btn"
-              onClick={toggleWishlist}
+              onClick={handleToggleWishlist}
               style={{
                 ...styles.wishlistBtn,
                 borderColor: wishlisted ? 'var(--color-blue)' : 'var(--color-border)',

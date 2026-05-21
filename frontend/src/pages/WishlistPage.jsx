@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart } from 'lucide-react';
+import { Heart, X } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useWishlist } from '../context/WishlistContext';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -14,6 +15,7 @@ function formatPrice(price) {
 
 export default function WishlistPage() {
   const navigate = useNavigate();
+  const { removeFromWishlist } = useWishlist();
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,6 +46,11 @@ export default function WishlistPage() {
       });
   }, []);
 
+  async function handleRemove(productId) {
+    setFavorites((prev) => prev.filter((p) => String(p.id) !== String(productId)));
+    await removeFromWishlist(productId);
+  }
+
   return (
     <>
       <style>{`
@@ -53,6 +60,7 @@ export default function WishlistPage() {
         .wl-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
         .wl-btn:hover { background-color: var(--color-yellow-hover) !important; }
         .wl-link-btn:hover { opacity: 0.65 !important; }
+        .wl-remove-btn:hover { background-color: var(--color-error) !important; color: #fff !important; border-color: var(--color-error) !important; }
       `}</style>
 
       <Navbar />
@@ -100,6 +108,7 @@ export default function WishlistPage() {
                   key={p.id}
                   product={p}
                   onClick={() => navigate(`/products/${p.id}`)}
+                  onRemove={() => handleRemove(p.id)}
                 />
               ))}
             </div>
@@ -114,15 +123,15 @@ export default function WishlistPage() {
 
 /* ─── Card ────────────────────────────────────────────── */
 
-function WishlistCard({ product, onClick }) {
+function WishlistCard({ product, onClick, onRemove }) {
   const inStock = product.quantityInStock > 0;
   const image = Array.isArray(product.images) && product.images.length > 0
     ? product.images[0]
     : null;
 
   return (
-    <div className="wl-card" style={styles.card} onClick={onClick}>
-      <div style={styles.imageWrap}>
+    <div className="wl-card" style={styles.card}>
+      <div style={styles.imageWrap} onClick={onClick}>
         {image && (
           <img
             src={image}
@@ -136,12 +145,28 @@ function WishlistCard({ product, onClick }) {
         <span style={{ ...styles.badge, ...(inStock ? styles.badgeIn : styles.badgeOut) }}>
           {inStock ? 'IN STOCK' : 'OUT OF STOCK'}
         </span>
+        <button
+          className="wl-remove-btn"
+          style={styles.removeBtn}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          aria-label="Remove from wishlist"
+          title="Remove from wishlist"
+        >
+          <X size={14} />
+        </button>
       </div>
 
       <div style={styles.body}>
         <p style={styles.category}>{product.categoryName}</p>
-        <p style={styles.name}>{product.name}</p>
+        <p style={styles.name} onClick={onClick}>{product.name}</p>
         <p style={styles.price}>{formatPrice(product.price)}</p>
+        <button
+          className="wl-btn"
+          style={styles.viewBtn}
+          onClick={onClick}
+        >
+          VIEW PRODUCT
+        </button>
       </div>
     </div>
   );
@@ -238,7 +263,6 @@ const styles = {
     backgroundColor: 'var(--color-white)',
     borderRadius: 'var(--radius-xl)',
     overflow: 'hidden',
-    cursor: 'pointer',
     boxShadow: 'var(--shadow-card)',
     transition: 'transform var(--transition-base), box-shadow var(--transition-base)',
     display: 'flex',
@@ -246,6 +270,7 @@ const styles = {
   },
   imageWrap: {
     position: 'relative',
+    cursor: 'pointer',
   },
   image: {
     width: '100%',
@@ -273,6 +298,24 @@ const styles = {
     backgroundColor: 'var(--color-error)',
     color: '#991b1b',
   },
+  removeBtn: {
+    position: 'absolute',
+    top: 'var(--space-3)',
+    right: 'var(--space-3)',
+    width: 28,
+    height: 28,
+    borderRadius: 'var(--radius-full)',
+    border: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast)',
+    padding: 0,
+    flexShrink: 0,
+  },
   body: {
     padding: 'var(--space-4)',
     display: 'flex',
@@ -298,6 +341,7 @@ const styles = {
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
+    cursor: 'pointer',
   },
   price: {
     margin: 'var(--space-2) 0 0',
@@ -305,6 +349,22 @@ const styles = {
     fontSize: 'var(--text-lg)',
     fontWeight: 'var(--weight-bold)',
     color: 'var(--color-charcoal)',
+  },
+  viewBtn: {
+    marginTop: 'var(--space-3)',
+    padding: 'var(--space-2) 0',
+    borderRadius: 'var(--radius-md)',
+    border: 'none',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+    width: '100%',
   },
 
   /* Empty / message */

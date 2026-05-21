@@ -24,6 +24,7 @@ import SalesManagerBulkPricingPage from './pages/SalesManagerBulkPricingPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { WishlistProvider } from './context/WishlistContext';
 
 const PAGE_TITLES = {
   '/': 'Scylla',
@@ -60,6 +61,7 @@ function PageTitle() {
 function App() {
   return (
     <NotificationProvider>
+      <WishlistProvider>
       <CartProvider>
         <Router>
           <PageTitle />
@@ -91,6 +93,7 @@ function App() {
         </div>
       </Router>
       </CartProvider>
+      </WishlistProvider>
     </NotificationProvider>
   );
 }
