@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, ChevronUp, CheckCheck } from 'lucide-react';
+import { ShoppingCart, ChevronUp, CheckCheck, SlidersHorizontal } from 'lucide-react';
+import FilterPanel from '../components/FilterPanel';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
 import Pagination from '../components/Pagination';
@@ -202,6 +203,16 @@ export default function ProductListingPage() {
   const gridRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [minPrice, setMinPrice] = useState(null);
+  const [maxPrice, setMaxPrice] = useState(null);
+  const [priceFloor, setPriceFloor] = useState(0);
+  const [priceCeiling, setPriceCeiling] = useState(10000);
+  const [minRating, setMinRating] = useState(0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [selectedColors, setSelectedColors] = useState([]);
+  const [availableColors, setAvailableColors] = useState([]);
+  const hasLoadedColors = useRef(false);
 
   // Fetch categories from backend on mount
   useEffect(() => {
@@ -209,6 +220,14 @@ export default function ProductListingPage() {
       .then((res) => res.ok ? res.json() : Promise.reject())
       .then((cats) => setAllCategories(['All', ...cats]))
       .catch(() => {}); // keep default ['All'] on error
+  }, []);
+
+  // Fetch price range once on mount so FilterPanel knows slider bounds
+  useEffect(() => {
+    fetch(apiUrl('/api/products/filter-meta'))
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((meta) => { setPriceFloor(meta.minPrice); setPriceCeiling(meta.maxPrice); })
+      .catch(() => {});
   }, []);
 
   // Persist sort preference across page refreshes
@@ -223,6 +242,16 @@ export default function ProductListingPage() {
     setError(null);
     const params = new URLSearchParams({ limit: pageSize, offset: (currentPage - 1) * pageSize });
     if (sortBy) params.set('sort', sortBy);
+    if (minPrice !== null) params.append('minPrice', minPrice);
+    if (maxPrice !== null) params.append('maxPrice', maxPrice);
+    if (minRating > 0) params.append('minRating', minRating);
+    // TODO: backend must support ?inStock=true and ?colors=X,Y,Z
+    // These params are sent but may be ignored until backend is updated
+    // Frontend filtering can be applied client-side as a temporary fallback:
+    // if inStockOnly, filter response data where quantityInStock > 0
+    // if selectedColors, filter response data where color is in selectedColors
+    if (inStockOnly) params.append('inStock', 'true');
+    if (selectedColors.length > 0) params.append('colors', selectedColors.join(','));
     const url = activeCategory === 'All'
       ? apiUrl(`/api/products?${params}`)
       : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}?${params}`);
@@ -231,9 +260,21 @@ export default function ProductListingPage() {
         if (!res.ok) throw new Error('Failed to fetch');
         return res.json();
       })
-      .then((resp) => { setProducts(resp.data); setPagination(resp.pagination); setLoading(false); })
+      .then((resp) => {
+        if (!hasLoadedColors.current && resp.data.length > 0) {
+          const unique = [...new Set(resp.data.map((p) => p.color).filter(Boolean))].sort();
+          setAvailableColors(unique);
+          hasLoadedColors.current = true;
+        }
+        let data = resp.data;
+        if (inStockOnly) data = data.filter((p) => p.quantityInStock > 0);
+        if (selectedColors.length > 0) data = data.filter((p) => selectedColors.includes(p.color));
+        setProducts(data);
+        setPagination(resp.pagination);
+        setLoading(false);
+      })
       .catch(() => { setError(true); setLoading(false); });
-  }, [activeCategory, sortBy, currentPage, pageSize]);
+  }, [activeCategory, sortBy, currentPage, pageSize, minPrice, maxPrice, minRating, inStockOnly, selectedColors]);
 
   useEffect(() => {
     function onScroll() {
@@ -289,6 +330,34 @@ export default function ProductListingPage() {
     setMoreOpen(false);
   }
 
+  function handlePriceChange(min, max) {
+    setMinPrice(min);
+    setMaxPrice(max);
+    setCurrentPage(1);
+  }
+  function handleRatingChange(rating) {
+    setMinRating(rating);
+    setCurrentPage(1);
+  }
+  function handleClearFilters() {
+    setMinPrice(null);
+    setMaxPrice(null);
+    setMinRating(0);
+    setInStockOnly(false);
+    setSelectedColors([]);
+    setCurrentPage(1);
+  }
+  function handleInStockChange(val) {
+    setInStockOnly(val);
+    setCurrentPage(1);
+  }
+  function handleColorsChange(colors) {
+    setSelectedColors(colors);
+    setCurrentPage(1);
+  }
+
+  const hasActiveFilter = minPrice !== null || maxPrice !== null || minRating > 0 || inStockOnly || selectedColors.length > 0;
+
   const activeInMore = moreCategories.includes(activeCategory);
 
   if (loading) return (
@@ -320,6 +389,13 @@ export default function ProductListingPage() {
         @media (max-width: 640px) { .hero-inner { grid-template-columns: 1fr; } .hero-image-col { display: none; } }
         .scroll-top-btn:hover { opacity: 0.85 !important; }
         .sort-opt:hover { background: color-mix(in srgb, var(--color-blue) 15%, transparent) !important; }
+        .plp-mobile-toggle-area { display: none; }
+        .plp-sidebar { display: block; }
+        @media (max-width: 768px) {
+          .plp-content-row { flex-direction: column !important; }
+          .plp-sidebar { display: none !important; }
+          .plp-mobile-toggle-area { display: block; margin-bottom: var(--space-4); }
+        }
       `}</style>
 
       <Navbar />
@@ -371,130 +447,194 @@ export default function ProductListingPage() {
       </div>
 
       <div style={styles.page}>
-        {/* ── Filter Bar ── */}
-        <div style={styles.filterBar}>
-          {/* Row 1: category pills */}
-          <div style={styles.pillGroup}>
-            {FEATURED.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => selectCategory(cat)}
-                style={activeCategory === cat ? { ...styles.pill, ...styles.pillActive } : styles.pill}
-              >
-                {cat}
-              </button>
-            ))}
+        <div className="plp-content-row" style={styles.contentRow}>
 
-            {moreCategories.length > 0 && (
-              <div ref={dropdownRef} style={styles.moreWrap}>
-                <button
-                  onClick={() => setMoreOpen((o) => !o)}
-                  style={activeInMore ? { ...styles.pill, ...styles.pillActive } : styles.pill}
-                >
-                  {activeInMore ? activeCategory : 'More'} ▾
-                </button>
-                {moreOpen && (
-                  <div style={styles.dropdown}>
-                    {moreCategories.map((cat) => (
-                      <button
-                        key={cat}
-                        className="dropdown-item-btn"
-                        onClick={() => selectCategory(cat)}
-                        style={
-                          activeCategory === cat
-                            ? { ...styles.dropdownItem, ...styles.dropdownItemActive }
-                            : styles.dropdownItem
-                        }
-                      >
-                        {cat}
-                      </button>
-                    ))}
+          {/* ── Left sidebar — desktop only ── */}
+          <aside className="plp-sidebar" style={styles.sidebar}>
+            <FilterPanel
+              minPrice={minPrice ?? priceFloor}
+              maxPrice={maxPrice ?? priceCeiling}
+              priceFloor={priceFloor}
+              priceCeiling={priceCeiling}
+              minRating={minRating}
+              onPriceChange={handlePriceChange}
+              onRatingChange={handleRatingChange}
+              onClearFilters={handleClearFilters}
+              inStockOnly={inStockOnly}
+              onInStockChange={handleInStockChange}
+              selectedColors={selectedColors}
+              onColorsChange={handleColorsChange}
+              availableColors={availableColors}
+            />
+          </aside>
+
+          {/* ── Right column ── */}
+          <div style={styles.mainCol}>
+
+            {/* Mobile: filter toggle button + collapsible panel */}
+            <div className="plp-mobile-toggle-area">
+              <button
+                onClick={() => setFiltersOpen((o) => !o)}
+                style={{
+                  ...styles.pill,
+                  ...(filtersOpen ? styles.pillActive : {}),
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                }}
+              >
+                <SlidersHorizontal size={14} />
+                Filters
+                {hasActiveFilter && <span style={styles.filterDot} />}
+              </button>
+              {filtersOpen && (
+                <div style={styles.mobilePanelWrap}>
+                  <FilterPanel
+                    minPrice={minPrice ?? priceFloor}
+                    maxPrice={maxPrice ?? priceCeiling}
+                    priceFloor={priceFloor}
+                    priceCeiling={priceCeiling}
+                    minRating={minRating}
+                    onPriceChange={handlePriceChange}
+                    onRatingChange={handleRatingChange}
+                    onClearFilters={handleClearFilters}
+                    inStockOnly={inStockOnly}
+                    onInStockChange={handleInStockChange}
+                    selectedColors={selectedColors}
+                    onColorsChange={handleColorsChange}
+                    availableColors={availableColors}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* ── Filter Bar ── */}
+            <div style={styles.filterBar}>
+              {/* Row 1: category pills */}
+              <div style={styles.pillGroup}>
+                {FEATURED.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => selectCategory(cat)}
+                    style={activeCategory === cat ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+                  >
+                    {cat}
+                  </button>
+                ))}
+
+                {moreCategories.length > 0 && (
+                  <div ref={dropdownRef} style={styles.moreWrap}>
+                    <button
+                      onClick={() => setMoreOpen((o) => !o)}
+                      style={activeInMore ? { ...styles.pill, ...styles.pillActive } : styles.pill}
+                    >
+                      {activeInMore ? activeCategory : 'More'} ▾
+                    </button>
+                    {moreOpen && (
+                      <div style={styles.dropdown}>
+                        {moreCategories.map((cat) => (
+                          <button
+                            key={cat}
+                            className="dropdown-item-btn"
+                            onClick={() => selectCategory(cat)}
+                            style={
+                              activeCategory === cat
+                                ? { ...styles.dropdownItem, ...styles.dropdownItemActive }
+                                : styles.dropdownItem
+                            }
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Row 2: sort dropdown, right-aligned */}
-          <div style={styles.sortRow}>
-            <div style={styles.sortControl}>
-              <span style={styles.sortLabel}>Sort by:</span>
-              <div ref={sortRef} style={styles.sortDropdownWrap}>
-                <button
-                  onClick={() => setSortOpen((o) => !o)}
-                  style={styles.sortBtn}
-                >
-                  {SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? 'Default'}
-                  <span style={styles.sortBtnChevron} aria-hidden="true">▾</span>
-                </button>
-                {sortOpen && (
-                  <ul style={styles.sortList}>
-                    {SORT_OPTIONS.map((opt) => (
-                      <li
-                        key={opt.value}
-                        className="sort-opt"
-                        onClick={() => { setSortBy(opt.value); setCurrentPage(1); setSortOpen(false); }}
-                        style={{
-                          ...styles.sortOption,
-                          ...(sortBy === opt.value ? styles.sortOptionActive : {}),
-                        }}
-                      >
-                        {opt.label}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              {/* Row 2: sort dropdown, right-aligned */}
+              <div style={styles.sortRow}>
+                <div style={styles.sortControl}>
+                  <span style={styles.sortLabel}>Sort by:</span>
+                  <div ref={sortRef} style={styles.sortDropdownWrap}>
+                    <button
+                      onClick={() => setSortOpen((o) => !o)}
+                      style={styles.sortBtn}
+                    >
+                      {SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? 'Default'}
+                      <span style={styles.sortBtnChevron} aria-hidden="true">▾</span>
+                    </button>
+                    {sortOpen && (
+                      <ul style={styles.sortList}>
+                        {SORT_OPTIONS.map((opt) => (
+                          <li
+                            key={opt.value}
+                            className="sort-opt"
+                            onClick={() => { setSortBy(opt.value); setCurrentPage(1); setSortOpen(false); }}
+                            style={{
+                              ...styles.sortOption,
+                              ...(sortBy === opt.value ? styles.sortOptionActive : {}),
+                            }}
+                          >
+                            {opt.label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* ── Product count + page size toggle ── */}
+            <div style={styles.countRow}>
+              <span style={styles.countText}>Showing {cards.length} products</span>
+              <div style={styles.pageSizeGroup}>
+                <span style={styles.sortLabel}>Show:</span>
+                {[20, 50].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => { setPageSize(n); setCurrentPage(1); }}
+                    style={{ ...styles.pageSizeBtn, ...(pageSize === n ? styles.pageSizeBtnActive : {}) }}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <span style={styles.sortLabel}>products per page</span>
+              </div>
+            </div>
+
+            {/* ── Product Grid ── */}
+            <div ref={gridRef} style={styles.grid} className="plp-grid">
+              {cards.map((card) => (
+                <ProductCard
+                  key={card.id}
+                  card={card}
+                  navigate={navigate}
+                  onAddToCart={(size) => {
+                    addItem(card.id, size);
+                    addToast();
+                  }}
+                  sizeMap={sizeMap}
+                  sizeStockMap={sizeStockMap}
+                />
+              ))}
+            </div>
+
+            {/* ── Pagination ── */}
+            {pagination && Math.ceil(pagination.total / pageSize) > 1 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(pagination.total / pageSize)}
+                onPageChange={(page) => {
+                  setCurrentPage(page);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
           </div>
         </div>
-
-        {/* ── Product count + page size toggle ── */}
-        <div style={styles.countRow}>
-          <span style={styles.countText}>Showing {cards.length} products</span>
-          <div style={styles.pageSizeGroup}>
-            <span style={styles.sortLabel}>Show:</span>
-            {[20, 50].map((n) => (
-              <button
-                key={n}
-                onClick={() => { setPageSize(n); setCurrentPage(1); }}
-                style={{ ...styles.pageSizeBtn, ...(pageSize === n ? styles.pageSizeBtnActive : {}) }}
-              >
-                {n}
-              </button>
-            ))}
-            <span style={styles.sortLabel}>products per page</span>
-          </div>
-        </div>
-
-        {/* ── Product Grid ── */}
-        <div ref={gridRef} style={styles.grid} className="plp-grid">
-          {cards.map((card) => (
-            <ProductCard
-              key={card.id}
-              card={card}
-              navigate={navigate}
-              onAddToCart={(size) => {
-                addItem(card.id, size);
-                addToast();
-              }}
-              sizeMap={sizeMap}
-              sizeStockMap={sizeStockMap}
-            />
-          ))}
-        </div>
-
-        {/* ── Pagination ── */}
-        {pagination && Math.ceil(pagination.total / pageSize) > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={Math.ceil(pagination.total / pageSize)}
-            onPageChange={(page) => {
-              setCurrentPage(page);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
       </div>
 
       <Footer />
@@ -708,6 +848,42 @@ const styles = {
     maxWidth: 'var(--container-max)',
     margin: '0 auto',
     padding: 'var(--space-10) var(--container-pad) var(--space-16)',
+  },
+
+  /* Two-column layout */
+  contentRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: '1.5rem',
+  },
+  sidebar: {
+    width: '180px',
+    flexShrink: 0,
+    boxSizing: 'border-box',
+    paddingRight: 'var(--space-3)',
+    borderRight: '1px solid rgba(74,74,74,0.08)',
+  },
+  mainCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mobilePanelWrap: {
+    marginTop: 'var(--space-4)',
+    padding: 'var(--space-4)',
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--color-border)',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: '-4px',
+    right: '-4px',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-charcoal)',
+    flexShrink: 0,
   },
 
   /* Filter bar */
