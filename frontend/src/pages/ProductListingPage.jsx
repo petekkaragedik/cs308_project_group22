@@ -245,11 +245,6 @@ export default function ProductListingPage() {
     if (minPrice !== null) params.append('minPrice', minPrice);
     if (maxPrice !== null) params.append('maxPrice', maxPrice);
     if (minRating > 0) params.append('minRating', minRating);
-    // TODO: backend must support ?inStock=true and ?colors=X,Y,Z
-    // These params are sent but may be ignored until backend is updated
-    // Frontend filtering can be applied client-side as a temporary fallback:
-    // if inStockOnly, filter response data where quantityInStock > 0
-    // if selectedColors, filter response data where color is in selectedColors
     if (inStockOnly) params.append('inStock', 'true');
     if (selectedColors.length > 0) params.append('colors', selectedColors.join(','));
     const url = activeCategory === 'All'
@@ -266,10 +261,7 @@ export default function ProductListingPage() {
           setAvailableColors(unique);
           hasLoadedColors.current = true;
         }
-        let data = resp.data;
-        if (inStockOnly) data = data.filter((p) => p.quantityInStock > 0);
-        if (selectedColors.length > 0) data = data.filter((p) => selectedColors.includes(p.color));
-        setProducts(data);
+        setProducts(resp.data);
         setPagination(resp.pagination);
         setLoading(false);
       })

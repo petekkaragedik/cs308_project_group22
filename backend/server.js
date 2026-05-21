@@ -682,6 +682,8 @@ app.get("/api/products", async (req, res) => {
     const minPrice = Number.isFinite(minPriceRaw) && minPriceRaw >= MIN_PRICE_FLOOR ? minPriceRaw : null;
     const maxPrice = Number.isFinite(maxPriceRaw) ? maxPriceRaw : null;
     const minRating = Number.isFinite(minRatingRaw) ? minRatingRaw : null;
+    const inStock = req.query.inStock === 'true';
+    const colors = req.query.colors ? req.query.colors.split(',').map(c => c.trim()).filter(Boolean) : [];
 
     const needsRatingJoin = sort === 'popularity' || minRating !== null;
 
@@ -699,6 +701,14 @@ app.get("/api/products", async (req, res) => {
     if (minRating !== null) {
       whereConds.push('COALESCE(r.avg_rating, 0) >= ?');
       filterParams.push(minRating);
+    }
+    if (inStock) {
+      whereConds.push(needsRatingJoin ? 'p.quantityInStock > 0' : 'quantityInStock > 0');
+    }
+    if (colors.length > 0) {
+      const placeholders = colors.map(() => '?').join(', ');
+      whereConds.push(needsRatingJoin ? `p.color IN (${placeholders})` : `color IN (${placeholders})`);
+      filterParams.push(...colors);
     }
 
     const whereClause = whereConds.length > 0 ? `WHERE ${whereConds.join(' AND ')}` : '';
@@ -744,30 +754,65 @@ app.get("/api/products/category/:categoryName", async (req, res) => {
     const { categoryName } = req.params;
     const { sort } = req.query;
 
-    // Pagination: applied in SQL after filtering/sorting
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 12);
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
-    // Reuse the same three sort modes as /api/products
-    let dataQuery;
-    if (sort === "price_asc") {
-      dataQuery = "SELECT * FROM products WHERE categoryName = ? ORDER BY price ASC LIMIT ? OFFSET ?";
-    } else if (sort === "price_desc") {
-      dataQuery = "SELECT * FROM products WHERE categoryName = ? ORDER BY price DESC LIMIT ? OFFSET ?";
-    } else if (sort === "popularity") {
-      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
-               FROM products p
-               LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
-               ON r.product_id = p.id
-               WHERE p.categoryName = ?
-               ORDER BY avg_rating DESC LIMIT ? OFFSET ?`;
+    const minPriceRaw = parseFloat(req.query.minPrice);
+    const maxPriceRaw = parseFloat(req.query.maxPrice);
+    const minRatingRaw = parseFloat(req.query.minRating);
+
+    const minPrice = Number.isFinite(minPriceRaw) && minPriceRaw >= MIN_PRICE_FLOOR ? minPriceRaw : null;
+    const maxPrice = Number.isFinite(maxPriceRaw) ? maxPriceRaw : null;
+    const minRating = Number.isFinite(minRatingRaw) ? minRatingRaw : null;
+    const inStock = req.query.inStock === 'true';
+    const colors = req.query.colors ? req.query.colors.split(',').map(c => c.trim()).filter(Boolean) : [];
+
+    const needsRatingJoin = sort === 'popularity' || minRating !== null;
+
+    const whereConds = [needsRatingJoin ? 'p.categoryName = ?' : 'categoryName = ?'];
+    const filterParams = [categoryName];
+
+    if (minPrice !== null) {
+      whereConds.push(needsRatingJoin ? 'p.price >= ?' : 'price >= ?');
+      filterParams.push(minPrice);
+    }
+    if (maxPrice !== null) {
+      whereConds.push(needsRatingJoin ? 'p.price <= ?' : 'price <= ?');
+      filterParams.push(maxPrice);
+    }
+    if (minRating !== null) {
+      whereConds.push('COALESCE(r.avg_rating, 0) >= ?');
+      filterParams.push(minRating);
+    }
+    if (inStock) {
+      whereConds.push(needsRatingJoin ? 'p.quantityInStock > 0' : 'quantityInStock > 0');
+    }
+    if (colors.length > 0) {
+      const placeholders = colors.map(() => '?').join(', ');
+      whereConds.push(needsRatingJoin ? `p.color IN (${placeholders})` : `color IN (${placeholders})`);
+      filterParams.push(...colors);
+    }
+
+    const whereClause = `WHERE ${whereConds.join(' AND ')}`;
+
+    let orderBy = '';
+    if (sort === 'price_asc') orderBy = needsRatingJoin ? 'ORDER BY p.price ASC' : 'ORDER BY price ASC';
+    else if (sort === 'price_desc') orderBy = needsRatingJoin ? 'ORDER BY p.price DESC' : 'ORDER BY price DESC';
+    else if (sort === 'popularity') orderBy = 'ORDER BY avg_rating DESC';
+
+    let dataQuery, countQuery;
+    if (needsRatingJoin) {
+      const ratingSubquery = `LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r ON r.product_id = p.id`;
+      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating FROM products p ${ratingSubquery} ${whereClause} ${orderBy} LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) AS total FROM products p ${ratingSubquery} ${whereClause}`;
     } else {
-      dataQuery = "SELECT * FROM products WHERE categoryName = ? LIMIT ? OFFSET ?";
+      dataQuery = `SELECT * FROM products ${whereClause} ${orderBy} LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) AS total FROM products ${whereClause}`;
     }
 
     const [[countRows], [rows]] = await Promise.all([
-      db.query("SELECT COUNT(*) AS total FROM products WHERE categoryName = ?", [categoryName]),
-      db.query(dataQuery, [categoryName, limit, offset]),
+      db.query(countQuery, filterParams),
+      db.query(dataQuery, [...filterParams, limit, offset]),
     ]);
 
     const total = countRows[0].total;
