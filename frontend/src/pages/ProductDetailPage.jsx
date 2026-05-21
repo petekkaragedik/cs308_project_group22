@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, ZoomIn, Lock } from 'lucide-react';
+import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import ImageCarousel from '../components/ImageCarousel';
 import { useCart } from '../context/CartContext';
 import { apiUrl } from '../apiBase';
 
@@ -166,8 +167,6 @@ export default function ProductDetailPage() {
     setProduct(null);
     setModelProducts([]);
 
-    let fetchedProduct;
-
     fetch(apiUrl(`/api/products/${id}`))
       .then((res) => {
         if (res.status === 404) throw Object.assign(new Error(), { code: 'not_found' });
@@ -175,13 +174,8 @@ export default function ProductDetailPage() {
         return res.json();
       })
       .then((p) => {
-        fetchedProduct = p;
         setProduct(p);
-        return fetch(apiUrl('/api/products'));
-      })
-      .then((res) => res.json())
-      .then((all) => {
-        setModelProducts(all.filter((p) => p.model === fetchedProduct.model));
+        setModelProducts([p, ...(p.modelVariants ?? [])]);
         setLoading(false);
       })
       .catch((err) => {
@@ -232,17 +226,12 @@ export default function ProductDetailPage() {
   }, [modelProducts, product]);
 
   /* ── Local state ── */
-  const [activeImage, setActiveImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
   const [cartAdded, setCartAdded] = useState(false);
   const [wishlisted, setWishlisted] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const thumbRowRef = useRef(null);
-  const touchStartX = useRef(null);
-  const mouseStartX = useRef(null);
-  const wasDrag = useRef(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   /* Current quantity in cart for selected product + size */
   const cartQuantity = useMemo(() => {
@@ -253,68 +242,11 @@ export default function ProductDetailPage() {
     return item ? item.quantity : 0;
   }, [cartItems, product, selectedSize]);
 
-  const goTo = useCallback((i) => {
-    setActiveImage(i);
-  }, []);
-
-  const goPrev = useCallback(() => {
-    setActiveImage((cur) => (cur > 0 ? cur - 1 : cur));
-  }, []);
-
-  const goNext = useCallback((len) => {
-    setActiveImage((cur) => (cur < len - 1 ? cur + 1 : cur));
-  }, []);
-
-  const handleMouseDown = useCallback((e) => {
-    e.preventDefault();
-    mouseStartX.current = e.clientX;
-    wasDrag.current = false;
-    setIsDragging(true);
-  }, []);
-
-  const handleMouseUp = useCallback((e, len) => {
-    if (mouseStartX.current === null) return;
-    const delta = mouseStartX.current - e.clientX;
-    wasDrag.current = Math.abs(delta) >= 10;
-    if (Math.abs(delta) >= 50) {
-      if (delta > 0) goNext(len); else goPrev();
-    }
-    mouseStartX.current = null;
-    setIsDragging(false);
-  }, [goNext, goPrev]);
-
-  const handleMouseLeave = useCallback(() => {
-    mouseStartX.current = null;
-    setIsDragging(false);
-  }, []);
-
-  /* Auto-scroll thumbnail strip to keep active thumb visible */
-  useEffect(() => {
-    const row = thumbRowRef.current;
-    if (!row) return;
-    const thumb = row.children[activeImage];
-    if (thumb) thumb.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-  }, [activeImage]);
-
-
-  const handleTouchStart = useCallback((e) => {
-    touchStartX.current = e.touches[0].clientX;
-  }, []);
-
-  const handleTouchEnd = useCallback((e, len) => {
-    if (touchStartX.current === null) return;
-    const delta = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(delta) >= 50) {
-      if (delta > 0) goNext(len); else goPrev();
-    }
-    touchStartX.current = null;
-  }, [goNext, goPrev]);
-
   /* Scroll to top on mount */
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
 
   /* Reset state + scroll to top when navigating between variants */
-  useEffect(() => { setSelectedSize(null); setActiveImage(0); window.scrollTo({ top: 0, behavior: 'instant' }); }, [id]);
+  useEffect(() => { setSelectedSize(null); window.scrollTo({ top: 0, behavior: 'instant' }); }, [id]);
 
   /* Load initial wishlist state for this product */
   useEffect(() => {
@@ -519,7 +451,6 @@ export default function ProductDetailPage() {
         @media (max-width: 768px) {
           .pdp-layout { grid-template-columns: 1fr; gap: var(--space-8); }
         }
-        .pdp-thumb:hover { opacity: 0.8; }
         .pdp-size-pill:hover { border-color: var(--color-charcoal); }
         .pdp-cart-btn:hover:not(:disabled) { background-color: var(--color-yellow-hover) !important; }
         .pdp-wishlist-btn:hover { border-color: var(--color-blue) !important; }
@@ -529,10 +460,6 @@ export default function ProductDetailPage() {
         .pdp-lightbox-overlay { animation: pdp-fade-in var(--transition-base) both; }
         .pdp-lightbox-arrow:hover { background: rgba(0,0,0,0.5) !important; }
         .pdp-lightbox-close:hover { opacity: 0.75; }
-        .pdp-main-img-wrap:hover .pdp-zoom-hint { opacity: 1 !important; }
-        .pdp-img-arrow { opacity: 0; transition: opacity var(--transition-base), background var(--transition-fast); }
-        .pdp-main-img-wrap:hover .pdp-img-arrow { opacity: 1; }
-        .pdp-img-arrow:hover { background: rgba(255,255,255,0.92) !important; }
       `}</style>
 
       <Navbar />
@@ -550,82 +477,17 @@ export default function ProductDetailPage() {
 
           {/* ── LEFT: Image Gallery ── */}
           <div>
-            {/* Main image */}
-            <div
-              className="pdp-main-img-wrap"
-              style={{ ...styles.mainImageWrap, cursor: isDragging ? 'grabbing' : 'grab' }}
-              onMouseDown={(e) => images.length > 1 && handleMouseDown(e)}
-              onMouseUp={(e) => images.length > 1 && handleMouseUp(e, images.length)}
-              onMouseLeave={handleMouseLeave}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={(e) => images.length > 1 && handleTouchEnd(e, images.length)}
+            <ImageCarousel
+              key={product.id}
+              images={images}
+              initialIndex={0}
+              onImageClick={(i) => { setLightboxIndex(i); setLightboxOpen(true); }}
             >
-              {images.length > 0 && (
-                <img
-                  src={images[activeImage]}
-                  alt={fixEncoding(product.name)}
-                  draggable="false"
-                  style={{ ...styles.mainImage, cursor: 'inherit' }}
-                  onClick={() => { if (!wasDrag.current) setLightboxOpen(true); }}
-                />
-              )}
-
-              {/* Prev arrow */}
-              {images.length > 1 && activeImage > 0 && (
-                <button
-                  className="pdp-img-arrow pdp-img-arrow-left"
-                  style={{ ...styles.imgArrow, left: 'var(--space-3)' }}
-                  onClick={(e) => { e.stopPropagation(); goPrev(); }}
-                  aria-label="Previous image"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-              )}
-
-              {/* Next arrow */}
-              {images.length > 1 && activeImage < images.length - 1 && (
-                <button
-                  className="pdp-img-arrow pdp-img-arrow-right"
-                  style={{ ...styles.imgArrow, right: 'var(--space-3)' }}
-                  onClick={(e) => { e.stopPropagation(); goNext(images.length); }}
-                  aria-label="Next image"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              )}
-
-              {/* Stock badge */}
+              {/* Stock badge overlaid on the image */}
               <span style={{ ...styles.badge, ...(inStock ? styles.badgeIn : styles.badgeOut) }}>
                 {inStock ? `IN STOCK — ${totalStock} left` : 'OUT OF STOCK'}
               </span>
-
-              {/* Zoom hint */}
-              <span className="pdp-zoom-hint" style={styles.zoomHint}>
-                <ZoomIn size={20} />
-              </span>
-            </div>
-
-            {/* Thumbnails */}
-            {images.length > 1 && (
-              <div ref={thumbRowRef} style={styles.thumbRow}>
-                {images.map((src, i) => (
-                  <button
-                    key={i}
-                    className="pdp-thumb"
-                    onClick={() => goTo(i)}
-                    style={{
-                      ...styles.thumb,
-                      border: i === activeImage
-                        ? '2px solid var(--color-charcoal)'
-                        : '2px solid transparent',
-                    }}
-                    aria-label={`View image ${i + 1}`}
-                  >
-                    <img src={src} alt={`${product.name} view ${i + 1}`} style={styles.thumbImg} />
-                  </button>
-                ))}
-              </div>
-            )}
+            </ImageCarousel>
           </div>
 
           {/* ── RIGHT: Product Info ── */}
@@ -914,7 +776,7 @@ export default function ProductDetailPage() {
             <button
               className="pdp-lightbox-arrow"
               style={{ ...styles.lightboxArrow, left: 'var(--space-6)' }}
-              onClick={(e) => { e.stopPropagation(); setActiveImage((activeImage - 1 + images.length) % images.length); }}
+              onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex - 1 + images.length) % images.length); }}
               aria-label="Previous image"
             >
               <ChevronLeft size={32} color="var(--color-sand)" />
@@ -922,7 +784,7 @@ export default function ProductDetailPage() {
           )}
 
           <img
-            src={images[activeImage]}
+            src={images[lightboxIndex]}
             alt={fixEncoding(product.name)}
             style={styles.lightboxImage}
             onClick={(e) => e.stopPropagation()}
@@ -933,7 +795,7 @@ export default function ProductDetailPage() {
             <button
               className="pdp-lightbox-arrow"
               style={{ ...styles.lightboxArrow, right: 'var(--space-6)' }}
-              onClick={(e) => { e.stopPropagation(); setActiveImage((activeImage + 1) % images.length); }}
+              onClick={(e) => { e.stopPropagation(); setLightboxIndex((lightboxIndex + 1) % images.length); }}
               aria-label="Next image"
             >
               <ChevronRight size={32} color="var(--color-sand)" />
@@ -1000,55 +862,7 @@ const styles = {
     color: 'var(--color-charcoal)',
   },
 
-  /* Image gallery */
-  mainImageWrap: {
-    position: 'relative',
-    borderRadius: 'var(--radius-xl)',
-    overflow: 'hidden',
-    backgroundColor: 'var(--color-sand)',
-    border: 'none',
-    boxShadow: 'none',
-  },
-  mainImage: {
-    width: '100%',
-    aspectRatio: '3 / 4',
-    objectFit: 'cover',
-    display: 'block',
-    border: 'none',
-    boxShadow: 'none',
-    margin: 0,
-    padding: 0,
-    transition: 'opacity var(--transition-base)',
-  },
-  imgArrow: {
-    position: 'absolute',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: 40,
-    height: 40,
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    color: 'var(--color-charcoal)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    zIndex: 10,
-    padding: 0,
-  },
-
-  zoomHint: {
-    position: 'absolute',
-    bottom: 'var(--space-3)',
-    right: 'var(--space-3)',
-    color: 'var(--color-white)',
-    opacity: 0,
-    transition: 'opacity var(--transition-base)',
-    pointerEvents: 'none',
-    display: 'flex',
-    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))',
-  },
+  /* Image gallery overlay elements */
   badge: {
     position: 'absolute',
     top: 'var(--space-4)',
@@ -1069,31 +883,6 @@ const styles = {
     backgroundColor: 'var(--color-error)',
     color: '#991b1b',
   },
-  thumbRow: {
-    display: 'flex',
-    gap: 'var(--space-2)',
-    flexWrap: 'wrap',
-    marginTop: 'var(--space-3)',
-  },
-  thumb: {
-    width: 64,
-    height: 64,
-    padding: 0,
-    borderRadius: 'var(--radius-md)',
-    backgroundColor: 'var(--color-sand)',
-    overflow: 'hidden',
-    cursor: 'pointer',
-    background: 'none',
-    transition: 'border-color var(--transition-fast), opacity var(--transition-fast)',
-    flexShrink: 0,
-  },
-  thumbImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-  },
-
   /* Info column */
   infoCol: {
     display: 'flex',
