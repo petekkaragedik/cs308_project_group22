@@ -242,6 +242,14 @@ export default function ProductDetailPage() {
     return item ? item.quantity : 0;
   }, [cartItems, product, selectedSize]);
 
+  /* Close lightbox on Escape key */
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const handleKey = (e) => { if (e.key === 'Escape') setLightboxOpen(false); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [lightboxOpen]);
+
   /* Scroll to top on mount */
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
 
