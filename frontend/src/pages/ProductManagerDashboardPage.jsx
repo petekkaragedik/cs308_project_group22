@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Pencil, Trash2 } from 'lucide-react';
 import { apiUrl } from '../apiBase';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 const DASHBOARD_TABS = [
+  { key: 'products', label: 'Product Management' },
   { key: 'stock', label: 'Stock Management' },
   { key: 'deliveries', label: 'Deliveries' },
   { key: 'comments', label: 'Comment Moderation' },
@@ -98,6 +99,14 @@ export default function ProductManagerDashboardPage() {
   const [commentStatus, setCommentStatus] = useState('pending');
   const [comments, setComments] = useState([]);
   const [commentBusyId, setCommentBusyId] = useState(null);
+
+  // Product CRUD state
+  const [productModal, setProductModal] = useState(null); // null | 'add' | 'edit'
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [formError, setFormError] = useState('');
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Stock alerts state
   const [stockAlerts, setStockAlerts] = useState({ outOfStock: [], lowStock: [], totalAlerts: 0 });
@@ -214,6 +223,7 @@ export default function ProductManagerDashboardPage() {
   useEffect(() => {
     if (authState === 'authorized') {
       loadSummary();
+      if (activeTab === 'products') loadProducts();
       if (activeTab === 'stock') loadProducts();
       if (activeTab === 'deliveries') loadOrders();
       if (activeTab === 'comments') loadComments();
@@ -308,6 +318,75 @@ export default function ProductManagerDashboardPage() {
     }
   }
 
+  function openAddProduct() {
+    setEditingProduct(null);
+    setFormError('');
+    setProductModal('add');
+  }
+
+  function openEditProduct(product) {
+    setEditingProduct(product);
+    setFormError('');
+    setProductModal('edit');
+  }
+
+  function closeModal() {
+    setProductModal(null);
+    setEditingProduct(null);
+    setFormError('');
+  }
+
+  async function submitProduct(formData) {
+    setFormSubmitting(true);
+    setFormError('');
+    try {
+      const isEdit = productModal === 'edit';
+      const url = isEdit
+        ? apiUrl(`/api/product-manager/products/${editingProduct.id}`)
+        : apiUrl('/api/product-manager/products');
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(data.message || 'Failed to save product.');
+        return;
+      }
+      closeModal();
+      await loadProducts();
+      await loadSummary();
+    } catch {
+      setFormError('Network error. Please try again.');
+    } finally {
+      setFormSubmitting(false);
+    }
+  }
+
+  async function deleteProduct(id) {
+    setDeletingId(id);
+    setError('');
+    try {
+      const res = await fetch(apiUrl(`/api/product-manager/products/${id}`), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || 'Failed to delete product.');
+      } else {
+        setConfirmDeleteId(null);
+        await loadProducts();
+        await loadSummary();
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function getNextStatuses(currentStatus) {
     const statusFlow = {
       'processing': ['in_transit', 'cancelled'],
@@ -369,6 +448,15 @@ export default function ProductManagerDashboardPage() {
         @keyframes pm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         .alerts-skeleton { animation: pm-pulse 1.5s ease-in-out infinite; }
         .alerts-expand-btn:hover { text-decoration: underline; }
+        .pm-add-btn:hover { background-color: var(--color-charcoal) !important; color: var(--color-sand) !important; }
+        .pm-edit-btn:hover { background-color: var(--color-blue) !important; }
+        .pm-delete-btn:hover:not(:disabled) { background-color: var(--color-error) !important; color: #fff !important; }
+        .pm-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pm-modal-overlay { backdrop-filter: blur(2px); }
+        .pm-cancel-btn:hover { background-color: var(--color-sand) !important; }
+        .pm-submit-btn:hover:not(:disabled) { background-color: var(--color-charcoal) !important; color: var(--color-sand) !important; }
+        .pm-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .pm-confirm-delete-btn:hover { background-color: #b91c1c !important; }
       `}</style>
 
       <Navbar />
@@ -513,6 +601,104 @@ export default function ProductManagerDashboardPage() {
         </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
+
+        {/* Product Management Tab */}
+        {activeTab === 'products' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
+              <button
+                className="pm-add-btn"
+                style={styles.addBtn}
+                onClick={openAddProduct}
+              >
+                <Plus size={16} style={{ flexShrink: 0 }} />
+                Add Product
+              </button>
+            </div>
+
+            {loading ? (
+              <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
+            ) : products.length === 0 ? (
+              <div style={styles.empty}>No products found.</div>
+            ) : (
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Product</th>
+                      <th style={styles.th}>Model</th>
+                      <th style={styles.th}>Category</th>
+                      <th style={styles.th}>Color</th>
+                      <th style={styles.th}>Price (TRY)</th>
+                      <th style={styles.th}>Stock</th>
+                      <th style={styles.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p.id} style={styles.tr}>
+                        <td style={styles.td}>
+                          <div style={styles.stockProductCell}>
+                            {p.firstImage && (
+                              <img src={p.firstImage} alt="" style={styles.alertThumb} />
+                            )}
+                            <Link to={`/products/${p.id}`} style={styles.productLink}>{p.name}</Link>
+                          </div>
+                        </td>
+                        <td style={styles.td}>{p.model || '-'}</td>
+                        <td style={styles.td}>{p.categoryName || '-'}</td>
+                        <td style={styles.td}>{p.color || '-'}</td>
+                        <td style={styles.td}>₺{Number(p.price).toFixed(2)}</td>
+                        <td style={styles.td}>{p.quantityInStock}</td>
+                        <td style={styles.td}>
+                          {confirmDeleteId === p.id ? (
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)' }}>Delete?</span>
+                              <button
+                                className="pm-confirm-delete-btn"
+                                style={{ ...styles.stockBtn, backgroundColor: 'var(--color-error)', color: '#fff', border: 'none' }}
+                                disabled={deletingId === p.id}
+                                onClick={() => deleteProduct(p.id)}
+                              >
+                                {deletingId === p.id ? '...' : 'Yes'}
+                              </button>
+                              <button
+                                className="pm-cancel-btn"
+                                style={styles.stockBtn}
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={styles.stockActions}>
+                              <button
+                                className="pm-edit-btn"
+                                style={styles.stockBtn}
+                                onClick={() => openEditProduct(p)}
+                              >
+                                <Pencil size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                Edit
+                              </button>
+                              <button
+                                className="pm-delete-btn"
+                                style={styles.stockBtn}
+                                onClick={() => setConfirmDeleteId(p.id)}
+                              >
+                                <Trash2 size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Stock Management Tab */}
         {activeTab === 'stock' && (
@@ -775,6 +961,17 @@ export default function ProductManagerDashboardPage() {
       </div>
 
       <Footer />
+
+      {productModal && (
+        <ProductFormModal
+          mode={productModal}
+          product={editingProduct}
+          onClose={closeModal}
+          onSubmit={submitProduct}
+          submitting={formSubmitting}
+          error={formError}
+        />
+      )}
     </>
   );
 }
@@ -1325,5 +1522,304 @@ const styles = {
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
     marginBottom: 'var(--space-4)',
+  },
+  addBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    padding: 'var(--space-2) var(--space-5)',
+    border: '1px solid var(--color-charcoal)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+  },
+};
+
+/* ─── Product Form Modal ──────────────────────────────── */
+
+const EMPTY_FORM = {
+  name: '', model: '', serialNumber: '', description: '',
+  quantityInStock: '0', price: '', warrantyStatus: false,
+  distributorInfo: 'scyllastore', categoryName: '', color: '',
+  size: '', gender: '', vatRate: '10', images: '',
+};
+
+function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error }) {
+  const isEdit = mode === 'edit';
+  const [form, setForm] = useState(() => {
+    if (isEdit && product) {
+      const imgs = Array.isArray(product.images) ? product.images : [];
+      return {
+        name: product.name || '',
+        model: product.model || '',
+        serialNumber: product.serialNumber || '',
+        description: product.description || '',
+        quantityInStock: String(product.quantityInStock ?? 0),
+        price: String(product.price ?? ''),
+        warrantyStatus: Boolean(product.warrantyStatus),
+        distributorInfo: product.distributorInfo || 'scyllastore',
+        categoryName: product.categoryName || '',
+        color: product.color || '',
+        size: product.size || '',
+        gender: product.gender || '',
+        vatRate: String(product.vatRate ?? 10),
+        images: imgs.join('\n'),
+      };
+    }
+    return EMPTY_FORM;
+  });
+
+  function set(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const images = form.images
+      .split('\n')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    onSubmit({
+      ...form,
+      quantityInStock: Number(form.quantityInStock) || 0,
+      price: Number(form.price),
+      vatRate: Number(form.vatRate) || 10,
+      warrantyStatus: form.warrantyStatus ? 1 : 0,
+      images,
+    });
+  }
+
+  return (
+    <div
+      className="pm-modal-overlay"
+      style={modalStyles.overlay}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={modalStyles.modal}>
+        <div style={modalStyles.header}>
+          <h2 style={modalStyles.title}>{isEdit ? 'Edit Product' : 'Add Product'}</h2>
+          <button style={modalStyles.closeBtn} onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={modalStyles.form}>
+          <div style={modalStyles.grid}>
+            <Field label="Name *" required>
+              <input style={modalStyles.input} value={form.name} onChange={(e) => set('name', e.target.value)} required />
+            </Field>
+            <Field label="Model *" required>
+              <input style={modalStyles.input} value={form.model} onChange={(e) => set('model', e.target.value)} required />
+            </Field>
+            <Field label="Price (TRY) *" required>
+              <input style={modalStyles.input} type="number" min="0" step="0.01" value={form.price} onChange={(e) => set('price', e.target.value)} required />
+            </Field>
+            <Field label="Category">
+              <input style={modalStyles.input} value={form.categoryName} onChange={(e) => set('categoryName', e.target.value)} />
+            </Field>
+            <Field label="Color">
+              <input style={modalStyles.input} value={form.color} onChange={(e) => set('color', e.target.value)} />
+            </Field>
+            <Field label="Size">
+              <input style={modalStyles.input} value={form.size} onChange={(e) => set('size', e.target.value)} placeholder="e.g. S, M, L" />
+            </Field>
+            <Field label="Gender">
+              <select style={modalStyles.input} value={form.gender} onChange={(e) => set('gender', e.target.value)}>
+                <option value="">—</option>
+                <option value="Women">Women</option>
+                <option value="Men">Men</option>
+                <option value="Unisex">Unisex</option>
+              </select>
+            </Field>
+            <Field label="Stock">
+              <input style={modalStyles.input} type="number" min="0" value={form.quantityInStock} onChange={(e) => set('quantityInStock', e.target.value)} />
+            </Field>
+            <Field label="Serial Number">
+              <input style={modalStyles.input} value={form.serialNumber} onChange={(e) => set('serialNumber', e.target.value)} />
+            </Field>
+            <Field label="Distributor">
+              <input style={modalStyles.input} value={form.distributorInfo} onChange={(e) => set('distributorInfo', e.target.value)} />
+            </Field>
+            <Field label="VAT Rate (%)">
+              <input style={modalStyles.input} type="number" min="0" max="100" value={form.vatRate} onChange={(e) => set('vatRate', e.target.value)} />
+            </Field>
+            <Field label="Warranty">
+              <label style={modalStyles.checkLabel}>
+                <input type="checkbox" checked={form.warrantyStatus} onChange={(e) => set('warrantyStatus', e.target.checked)} />
+                <span>Has warranty</span>
+              </label>
+            </Field>
+          </div>
+
+          <Field label="Description">
+            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} value={form.description} onChange={(e) => set('description', e.target.value)} rows={3} />
+          </Field>
+
+          <Field label="Image URLs (one per line)">
+            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} value={form.images} onChange={(e) => set('images', e.target.value)} rows={3} placeholder="https://..." />
+          </Field>
+
+          {error && <div style={modalStyles.errorBox}>{error}</div>}
+
+          <div style={modalStyles.actions}>
+            <button type="button" className="pm-cancel-btn" style={modalStyles.cancelBtn} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="pm-submit-btn" style={modalStyles.submitBtn} disabled={submitting}>
+              {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Product'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+      <label style={modalStyles.label}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const modalStyles = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 500,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 'var(--space-4)',
+  },
+  modal: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-xl)',
+    boxShadow: 'var(--shadow-lg)',
+    width: '100%',
+    maxWidth: '680px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 'var(--space-5) var(--space-6)',
+    borderBottom: '1px solid var(--color-border)',
+    position: 'sticky',
+    top: 0,
+    backgroundColor: 'var(--color-white)',
+    zIndex: 1,
+  },
+  title: {
+    margin: 0,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 'var(--text-xl)',
+    fontWeight: 'var(--weight-regular)',
+    color: 'var(--color-black)',
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    fontSize: '1.5rem',
+    lineHeight: 1,
+    cursor: 'pointer',
+    color: 'var(--color-charcoal-light)',
+    padding: '0 var(--space-2)',
+  },
+  form: {
+    padding: 'var(--space-6)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-4)',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 'var(--space-4)',
+  },
+  label: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    color: 'var(--color-charcoal-light)',
+  },
+  input: {
+    padding: 'var(--space-2) var(--space-3)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    backgroundColor: 'var(--color-sand)',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  textarea: {
+    resize: 'vertical',
+    lineHeight: 1.5,
+  },
+  checkLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    cursor: 'pointer',
+    paddingTop: 'var(--space-2)',
+  },
+  errorBox: {
+    padding: 'var(--space-3) var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-error)',
+    color: '#991b1b',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+  },
+  actions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 'var(--space-3)',
+    paddingTop: 'var(--space-2)',
+    borderTop: '1px solid var(--color-border)',
+  },
+  cancelBtn: {
+    padding: 'var(--space-2) var(--space-6)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast)',
+  },
+  submitBtn: {
+    padding: 'var(--space-2) var(--space-6)',
+    border: '1px solid var(--color-charcoal)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-black)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    cursor: 'pointer',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
   },
 };
