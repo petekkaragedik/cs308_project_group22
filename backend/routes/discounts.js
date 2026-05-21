@@ -1,9 +1,10 @@
 const express = require('express');
 const { calculateDiscount, resolveBestDiscount } = require('../services/discountCalculator');
-const { detectWishlistDiscounts } = require('../services/wishlistNotificationService');
+const createWishlistNotificationService = require('../services/wishlistNotificationService');
 
 module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
   const router = express.Router();
+  const { detectWishlistDiscounts } = createWishlistNotificationService(db);
 
   /**
    * POST /api/discounts/campaigns
