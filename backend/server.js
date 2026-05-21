@@ -76,6 +76,7 @@ app.get("/", (req, res) => {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const LOW_STOCK_THRESHOLD = 5;
+const MIN_PRICE_FLOOR = 0;
 
 function signToken(user) {
   return jwt.sign(
@@ -657,34 +658,69 @@ app.get("/api/products/search", async (req, res) => {
   }
 });
 
+app.get("/api/products/filter-meta", async (_req, res) => {
+  try {
+    const [rows] = await db.query("SELECT MIN(price) AS minPrice, MAX(price) AS maxPrice FROM products");
+    res.json({ minPrice: Number(rows[0].minPrice) || 0, maxPrice: Number(rows[0].maxPrice) || 0 });
+  } catch (error) {
+    console.error("Filter meta error:", error);
+    res.status(500).json({ message: "Failed to fetch filter metadata" });
+  }
+});
+
 app.get("/api/products", async (req, res) => {
   try {
     const { sort } = req.query;
 
-    // Pagination: applied in SQL after filtering/sorting (not JS array slicing)
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 12);
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
-    // Sort modes: price_asc = cheapest first, price_desc = most expensive first,
-    // popularity = highest average rating first; default = no ordering.
-    let dataQuery;
-    if (sort === "price_asc") {
-      dataQuery = "SELECT * FROM products ORDER BY price ASC LIMIT ? OFFSET ?";
-    } else if (sort === "price_desc") {
-      dataQuery = "SELECT * FROM products ORDER BY price DESC LIMIT ? OFFSET ?";
-    } else if (sort === "popularity") {
-      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
-               FROM products p
-               LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
-               ON r.product_id = p.id
-               ORDER BY avg_rating DESC LIMIT ? OFFSET ?`;
+    const minPriceRaw = parseFloat(req.query.minPrice);
+    const maxPriceRaw = parseFloat(req.query.maxPrice);
+    const minRatingRaw = parseFloat(req.query.minRating);
+
+    const minPrice = Number.isFinite(minPriceRaw) && minPriceRaw >= MIN_PRICE_FLOOR ? minPriceRaw : null;
+    const maxPrice = Number.isFinite(maxPriceRaw) ? maxPriceRaw : null;
+    const minRating = Number.isFinite(minRatingRaw) ? minRatingRaw : null;
+
+    const needsRatingJoin = sort === 'popularity' || minRating !== null;
+
+    const whereConds = [];
+    const filterParams = [];
+
+    if (minPrice !== null) {
+      whereConds.push(needsRatingJoin ? 'p.price >= ?' : 'price >= ?');
+      filterParams.push(minPrice);
+    }
+    if (maxPrice !== null) {
+      whereConds.push(needsRatingJoin ? 'p.price <= ?' : 'price <= ?');
+      filterParams.push(maxPrice);
+    }
+    if (minRating !== null) {
+      whereConds.push('COALESCE(r.avg_rating, 0) >= ?');
+      filterParams.push(minRating);
+    }
+
+    const whereClause = whereConds.length > 0 ? `WHERE ${whereConds.join(' AND ')}` : '';
+
+    let orderBy = '';
+    if (sort === 'price_asc') orderBy = needsRatingJoin ? 'ORDER BY p.price ASC' : 'ORDER BY price ASC';
+    else if (sort === 'price_desc') orderBy = needsRatingJoin ? 'ORDER BY p.price DESC' : 'ORDER BY price DESC';
+    else if (sort === 'popularity') orderBy = 'ORDER BY avg_rating DESC';
+
+    let dataQuery, countQuery;
+    if (needsRatingJoin) {
+      const ratingSubquery = `LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r ON r.product_id = p.id`;
+      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating FROM products p ${ratingSubquery} ${whereClause} ${orderBy} LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) AS total FROM products p ${ratingSubquery} ${whereClause}`;
     } else {
-      dataQuery = "SELECT * FROM products LIMIT ? OFFSET ?";
+      dataQuery = `SELECT * FROM products ${whereClause} ${orderBy} LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) AS total FROM products ${whereClause}`;
     }
 
     const [[countRows], [rows]] = await Promise.all([
-      db.query("SELECT COUNT(*) AS total FROM products"),
-      db.query(dataQuery, [limit, offset]),
+      db.query(countQuery, filterParams),
+      db.query(dataQuery, [...filterParams, limit, offset]),
     ]);
 
     const products = rows.map(product => ({
