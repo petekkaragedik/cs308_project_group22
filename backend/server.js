@@ -1126,6 +1126,94 @@ app.post("/api/products/:productId/comments", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/products/:productId/my-review — authenticated: user's own comment + rating
+app.get("/api/products/:productId/my-review", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+  try {
+    const [[ratingRow]] = await db.query(
+      "SELECT rating FROM ratings WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId]
+    );
+    const [commentRows] = await db.query(
+      "SELECT id, body, status, created_at, updated_at FROM comments WHERE user_id = ? AND product_id = ? ORDER BY created_at DESC LIMIT 1",
+      [req.user.id, productId]
+    );
+    res.json({
+      rating: ratingRow ? ratingRow.rating : null,
+      comment: commentRows.length > 0 ? commentRows[0] : null,
+    });
+  } catch (error) {
+    console.error("Get my-review error:", error);
+    res.status(500).json({ message: "Failed to fetch your review" });
+  }
+});
+
+// PUT /api/products/:productId/comments/:commentId — update own comment (resets to pending)
+app.put("/api/products/:productId/comments/:commentId", requireAuth, async (req, res) => {
+  const { productId, commentId } = req.params;
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+
+  if (!body) {
+    return res.status(400).json({ message: "Comment body is required" });
+  }
+  if (body.length > 2000) {
+    return res.status(400).json({ message: "Comment is too long (max 2000 characters)" });
+  }
+
+  try {
+    const [existing] = await db.query(
+      "SELECT id, user_id FROM comments WHERE id = ? AND product_id = ?",
+      [commentId, productId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+    if (existing[0].user_id !== req.user.id) {
+      return res.status(403).json({ message: "You can only edit your own comments" });
+    }
+
+    await db.query(
+      "UPDATE comments SET body = ?, status = 'pending', updated_at = NOW() WHERE id = ?",
+      [body, commentId]
+    );
+
+    const [rows] = await db.query(
+      "SELECT id, user_id, product_id, body, status, created_at, updated_at FROM comments WHERE id = ?",
+      [commentId]
+    );
+    return res.json({
+      message: "Comment updated and awaiting approval",
+      comment: rows[0],
+    });
+  } catch (error) {
+    console.error("Update comment error:", error);
+    res.status(500).json({ message: "Failed to update comment" });
+  }
+});
+
+// DELETE /api/products/:productId/comments/:commentId — user deletes their own comment
+app.delete("/api/products/:productId/comments/:commentId", requireAuth, async (req, res) => {
+  const { productId, commentId } = req.params;
+  try {
+    const [existing] = await db.query(
+      "SELECT id, user_id FROM comments WHERE id = ? AND product_id = ?",
+      [commentId, productId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+    if (existing[0].user_id !== req.user.id) {
+      return res.status(403).json({ message: "You can only delete your own comments" });
+    }
+
+    await db.query("DELETE FROM comments WHERE id = ?", [commentId]);
+    res.json({ message: "Comment deleted" });
+  } catch (error) {
+    console.error("Delete comment error:", error);
+    res.status(500).json({ message: "Failed to delete comment" });
+  }
+});
+
 // GET /api/products/:productId/comments — public: only approved comments
 app.get("/api/products/:productId/comments", async (req, res) => {
   try {
