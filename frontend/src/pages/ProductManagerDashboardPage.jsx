@@ -7,6 +7,7 @@ import Footer from '../components/Footer';
 
 const DASHBOARD_TABS = [
   { key: 'products', label: 'Product Management' },
+  { key: 'categories', label: 'Categories' },
   { key: 'stock', label: 'Stock Management' },
   { key: 'deliveries', label: 'Deliveries' },
   { key: 'comments', label: 'Comment Moderation' },
@@ -108,6 +109,14 @@ export default function ProductManagerDashboardPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  // Category management state
+  const [categories, setCategories] = useState([]);
+  const [editingCategoryName, setEditingCategoryName] = useState(null);
+  const [editCategoryValue, setEditCategoryValue] = useState('');
+  const [confirmDeleteCategory, setConfirmDeleteCategory] = useState(null);
+  const [deletingCategory, setDeletingCategory] = useState(null);
+  const [categoryBusy, setCategoryBusy] = useState(false);
+
   // Stock alerts state
   const [stockAlerts, setStockAlerts] = useState({ outOfStock: [], lowStock: [], totalAlerts: 0 });
   const [stockAlertsLoading, setStockAlertsLoading] = useState(false);
@@ -201,6 +210,22 @@ export default function ProductManagerDashboardPage() {
     }
   }, [orderStatusFilter]);
 
+  const loadCategories = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(apiUrl('/api/product-manager/categories'), { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setError('Could not load categories. Please try again.');
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const loadStockAlerts = useCallback(async () => {
     setStockAlertsLoading(true);
     setStockAlertsError('');
@@ -224,11 +249,12 @@ export default function ProductManagerDashboardPage() {
     if (authState === 'authorized') {
       loadSummary();
       if (activeTab === 'products') loadProducts();
+      if (activeTab === 'categories') loadCategories();
       if (activeTab === 'stock') loadProducts();
       if (activeTab === 'deliveries') loadOrders();
       if (activeTab === 'comments') loadComments();
     }
-  }, [authState, activeTab, loadSummary, loadProducts, loadOrders, loadComments]);
+  }, [authState, activeTab, loadSummary, loadProducts, loadCategories, loadOrders, loadComments]);
 
   useEffect(() => {
     if (authState === 'authorized') {
@@ -391,6 +417,56 @@ export default function ProductManagerDashboardPage() {
       setError('Network error. Please try again.');
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function startEditCategory(name) {
+    setEditingCategoryName(name);
+    setEditCategoryValue(name);
+  }
+
+  function cancelEditCategory() {
+    setEditingCategoryName(null);
+    setEditCategoryValue('');
+  }
+
+  async function saveCategory(oldName) {
+    const newName = editCategoryValue.trim();
+    if (!newName || newName === oldName) { cancelEditCategory(); return; }
+    setCategoryBusy(true);
+    setError('');
+    try {
+      const res = await fetch(apiUrl(`/api/product-manager/categories/${encodeURIComponent(oldName)}`), {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.message || 'Failed to rename category.'); return; }
+      cancelEditCategory();
+      await loadCategories();
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setCategoryBusy(false);
+    }
+  }
+
+  async function deleteCategory(name) {
+    setDeletingCategory(name);
+    setError('');
+    try {
+      const res = await fetch(apiUrl(`/api/product-manager/categories/${encodeURIComponent(name)}`), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.message || 'Failed to delete category.'); }
+      else { setConfirmDeleteCategory(null); await loadCategories(); }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setDeletingCategory(null);
     }
   }
 
@@ -691,6 +767,105 @@ export default function ProductManagerDashboardPage() {
                                 className="pm-delete-btn"
                                 style={styles.stockBtn}
                                 onClick={() => setConfirmDeleteId(p.id)}
+                              >
+                                <Trash2 size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Category Management Tab */}
+        {activeTab === 'categories' && (
+          <>
+            {loading ? (
+              <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
+            ) : categories.length === 0 ? (
+              <div style={styles.empty}>No categories found.</div>
+            ) : (
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Category Name</th>
+                      <th style={styles.th}>Products</th>
+                      <th style={styles.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((c) => (
+                      <tr key={c.name} style={styles.tr}>
+                        <td style={styles.td}>
+                          {editingCategoryName === c.name ? (
+                            <input
+                              style={{ ...styles.stockInput, width: '200px' }}
+                              value={editCategoryValue}
+                              onChange={(e) => setEditCategoryValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveCategory(c.name);
+                                if (e.key === 'Escape') cancelEditCategory();
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <span style={{ fontWeight: 'var(--weight-medium)' }}>{c.name}</span>
+                          )}
+                        </td>
+                        <td style={styles.td}>{c.productCount}</td>
+                        <td style={styles.td}>
+                          {confirmDeleteCategory === c.name ? (
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)' }}>Delete?</span>
+                              <button
+                                className="pm-confirm-delete-btn"
+                                style={{ ...styles.stockBtn, backgroundColor: 'var(--color-error)', color: '#fff', border: 'none' }}
+                                disabled={deletingCategory === c.name}
+                                onClick={() => deleteCategory(c.name)}
+                              >
+                                {deletingCategory === c.name ? '...' : 'Yes'}
+                              </button>
+                              <button className="pm-cancel-btn" style={styles.stockBtn} onClick={() => setConfirmDeleteCategory(null)}>
+                                No
+                              </button>
+                            </div>
+                          ) : editingCategoryName === c.name ? (
+                            <div style={styles.stockActions}>
+                              <button
+                                className="stock-save-btn"
+                                style={styles.stockBtn}
+                                disabled={categoryBusy}
+                                onClick={() => saveCategory(c.name)}
+                              >
+                                {categoryBusy ? '...' : 'Save'}
+                              </button>
+                              <button className="stock-cancel-btn" style={styles.stockBtn} onClick={cancelEditCategory}>
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={styles.stockActions}>
+                              <button
+                                className="pm-edit-btn"
+                                style={styles.stockBtn}
+                                onClick={() => startEditCategory(c.name)}
+                              >
+                                <Pencil size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                Rename
+                              </button>
+                              <button
+                                className="pm-delete-btn"
+                                style={styles.stockBtn}
+                                disabled={c.productCount > 0}
+                                title={c.productCount > 0 ? 'Cannot delete: category has products' : 'Delete category'}
+                                onClick={() => setConfirmDeleteCategory(c.name)}
                               >
                                 <Trash2 size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
                                 Delete
