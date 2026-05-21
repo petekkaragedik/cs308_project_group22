@@ -1524,6 +1524,64 @@ app.delete("/api/product-manager/products/:id", requireAuth, requireRole('produc
   }
 });
 
+// GET /api/product-manager/categories — list distinct categories with product count
+app.get("/api/product-manager/categories", requireAuth, requireRole('product_manager'), async (_req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT categoryName AS name, COUNT(*) AS productCount
+       FROM products
+       WHERE categoryName IS NOT NULL AND categoryName != ''
+       GROUP BY categoryName
+       ORDER BY categoryName`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("List categories error:", error);
+    res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
+
+// PUT /api/product-manager/categories/:name — rename category
+app.put("/api/product-manager/categories/:name", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const oldName = decodeURIComponent(req.params.name);
+  const { newName } = req.body;
+  if (!newName || !newName.trim()) {
+    return res.status(400).json({ message: "newName is required" });
+  }
+  const trimmed = newName.trim();
+  try {
+    const [result] = await db.query(
+      'UPDATE products SET categoryName = ? WHERE categoryName = ?',
+      [trimmed, oldName]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+    res.json({ name: trimmed, productCount: result.affectedRows });
+  } catch (error) {
+    console.error("Rename category error:", error);
+    res.status(500).json({ message: "Failed to rename category" });
+  }
+});
+
+// DELETE /api/product-manager/categories/:name — delete category (only if no products)
+app.delete("/api/product-manager/categories/:name", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const name = decodeURIComponent(req.params.name);
+  try {
+    const [[{ count }]] = await db.query(
+      'SELECT COUNT(*) AS count FROM products WHERE categoryName = ?',
+      [name]
+    );
+    if (Number(count) > 0) {
+      return res.status(409).json({ message: `Cannot delete: ${count} product(s) still use this category` });
+    }
+    res.json({ message: "Category deleted" });
+  } catch (error) {
+    console.error("Delete category error:", error);
+    res.status(500).json({ message: "Failed to delete category" });
+  }
+});
+
 app.use("/api/orders", createOrderRoutes(db, requireAuth));
 app.use("/api/returns", createReturnRoutes(db, requireAuth, requireRole));
 app.use("/api/discounts", createDiscountRoutes(db, requireAuth, requireRole));
