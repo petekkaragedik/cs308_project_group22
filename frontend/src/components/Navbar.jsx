@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, Heart, ShoppingCart, User, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { apiUrl } from '../apiBase';
 import NotificationBell from './NotificationBell';
 
@@ -16,6 +17,7 @@ function formatPrice(price) {
 export default function Navbar() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const [allProducts, setAllProducts] = useState([]);
 
   useEffect(() => {
@@ -40,8 +42,13 @@ export default function Navbar() {
           >
             <Search size={22} />
           </button>
-          <Link to="/wishlist" style={styles.iconBtn} aria-label="Wishlist">
+          <Link to="/wishlist" style={styles.cartBtn} aria-label="Wishlist">
             <Heart size={22} />
+            {wishlistCount > 0 && (
+              <span style={styles.badge}>
+                {wishlistCount > 99 ? '99+' : wishlistCount}
+              </span>
+            )}
           </Link>
           <NotificationBell />
           <Link to="/cart" style={styles.cartBtn} aria-label="Cart">
