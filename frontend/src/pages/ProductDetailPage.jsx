@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { Heart, ShoppingCart, CheckCheck, Star, X, ChevronLeft, ChevronRight, Lock, Pencil, Trash2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ImageCarousel from '../components/ImageCarousel';
@@ -271,6 +271,11 @@ export default function ProductDetailPage() {
   const [reviewText, setReviewText] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
+  /* ── User's own review (fetched on load) ── */
+  const [myReview, setMyReview] = useState(null); // { rating, comment }
+  const [isEditing, setIsEditing] = useState(false);
+  const [deletingComment, setDeletingComment] = useState(false);
+
   /* ── Ratings + approved comments ── */
   const [ratingStats, setRatingStats] = useState({ average: 0, count: 0 });
   const [approvedReviews, setApprovedReviews] = useState([]);
@@ -301,19 +306,34 @@ export default function ProductDetailPage() {
     }
   }, [id]);
 
+  const loadMyReview = useCallback(async () => {
+    const token = sessionStorage.getItem('token');
+    if (!token || !id) return;
+    try {
+      const res = await fetch(apiUrl(`/api/products/${id}/my-review`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyReview(data);
+        if (data.rating) setReviewRating(data.rating);
+      }
+    } catch { /* keep defaults */ }
+  }, [id]);
+
   useEffect(() => { loadReviews(); }, [loadReviews]);
 
   useEffect(() => {
     if (!id) return;
     const token = sessionStorage.getItem('token');
     if (!token) { setCanReview(false); return; }
-    fetch(apiUrl(`/api/products/${id}/can-review`), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const authHeader = { Authorization: `Bearer ${token}` };
+    fetch(apiUrl(`/api/products/${id}/can-review`), { headers: authHeader })
       .then((res) => res.ok ? res.json() : { canReview: false })
       .then((data) => setCanReview(data.canReview === true))
       .catch(() => setCanReview(false));
-  }, [id]);
+    loadMyReview();
+  }, [id, loadMyReview]);
 
   function addToast(message) {
     const tid = Date.now();
@@ -358,8 +378,12 @@ export default function ProductDetailPage() {
       }
 
       if (trimmedText) {
-        const c = await fetch(apiUrl(`/api/products/${id}/comments`), {
-          method: 'POST',
+        const isUpdate = isEditing && myReview?.comment?.id;
+        const url = isUpdate
+          ? apiUrl(`/api/products/${id}/comments/${myReview.comment.id}`)
+          : apiUrl(`/api/products/${id}/comments`);
+        const c = await fetch(url, {
+          method: isUpdate ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader },
           body: JSON.stringify({ body: trimmedText }),
         });
@@ -371,22 +395,58 @@ export default function ProductDetailPage() {
         return;
       }
 
+      const updatedComment = isEditing && myReview?.comment?.id && trimmedText;
       if (reviewRating && trimmedText) {
-        addToast('Rating saved. Comment submitted for approval.');
+        addToast(updatedComment ? 'Rating updated. Comment resubmitted for approval.' : 'Rating saved. Comment submitted for approval.');
       } else if (reviewRating) {
         addToast('Thanks for your rating!');
       } else {
-        addToast('Review submitted for approval!');
+        addToast(updatedComment ? 'Comment updated and awaiting approval.' : 'Review submitted for approval!');
       }
 
-      setReviewRating(0);
       setReviewText('');
-      await loadReviews();
+      setIsEditing(false);
+      await Promise.all([loadReviews(), loadMyReview()]);
     } catch {
       addToast('Submission failed. Please try again.');
     } finally {
       setReviewSubmitting(false);
     }
+  }
+
+  async function handleDeleteComment() {
+    const token = sessionStorage.getItem('token');
+    if (!token || !myReview?.comment?.id) return;
+    setDeletingComment(true);
+    try {
+      const res = await fetch(apiUrl(`/api/products/${id}/comments/${myReview.comment.id}`), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        addToast('Comment deleted.');
+        setMyReview((prev) => ({ ...prev, comment: null }));
+        setIsEditing(false);
+        setReviewText('');
+        await loadReviews();
+      } else {
+        addToast('Failed to delete comment.');
+      }
+    } catch {
+      addToast('Failed to delete comment.');
+    } finally {
+      setDeletingComment(false);
+    }
+  }
+
+  function handleStartEdit() {
+    setReviewText(myReview?.comment?.body ?? '');
+    setIsEditing(true);
+  }
+
+  function handleCancelEdit() {
+    setReviewText('');
+    setIsEditing(false);
   }
 
   /* ── Loading / error / not-found ── */
@@ -433,6 +493,9 @@ export default function ProductDetailPage() {
         .pdp-wishlist-btn:hover { border-color: var(--color-blue) !important; }
         .pdp-swatch:hover { transform: scale(1.15); }
         .pdp-review-star:hover { cursor: pointer; }
+        .pdp-edit-comment-btn:hover { background-color: var(--color-blue) !important; }
+        .pdp-delete-comment-btn:hover:not(:disabled) { background-color: var(--color-error) !important; color: #fff !important; border-color: var(--color-error) !important; }
+        .pdp-delete-comment-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         @keyframes pdp-fade-in { from { opacity: 0; } to { opacity: 1; } }
         .pdp-lightbox-overlay { animation: pdp-fade-in var(--transition-base) both; }
         .pdp-lightbox-arrow:hover { background: rgba(0,0,0,0.5) !important; }
@@ -662,37 +725,88 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Leave a review form — star rating open to all, comment gated to verified purchasers */}
+          {/* User's own comment (pending / rejected) — shown before the form */}
+          {myReview?.comment && !isEditing && (
+            <div style={styles.myCommentCard}>
+              <div style={styles.myCommentHeader}>
+                <span style={styles.myCommentLabel}>Your Comment</span>
+                <span style={{
+                  ...styles.myCommentBadge,
+                  backgroundColor: myReview.comment.status === 'approved'
+                    ? 'var(--color-success)'
+                    : myReview.comment.status === 'rejected'
+                    ? 'var(--color-error)'
+                    : 'var(--color-warning)',
+                  color: myReview.comment.status === 'rejected' ? '#991b1b' : 'var(--color-black)',
+                }}>
+                  {myReview.comment.status.toUpperCase()}
+                </span>
+                <div style={styles.myCommentActions}>
+                  <button className="pdp-edit-comment-btn" style={styles.myCommentBtn} onClick={handleStartEdit}>
+                    <Pencil size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    Edit
+                  </button>
+                  <button
+                    className="pdp-delete-comment-btn"
+                    style={styles.myCommentBtn}
+                    disabled={deletingComment}
+                    onClick={handleDeleteComment}
+                  >
+                    <Trash2 size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    {deletingComment ? '...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+              <p style={styles.myCommentBody}>{myReview.comment.body}</p>
+              {myReview.comment.status === 'pending' && (
+                <p style={styles.myCommentNotice}>Under review — visible to you only until approved.</p>
+              )}
+              {myReview.comment.status === 'rejected' && (
+                <p style={{ ...styles.myCommentNotice, color: '#991b1b' }}>Not approved. Edit and resubmit to try again.</p>
+              )}
+            </div>
+          )}
+
+          {/* Leave / Update review form */}
           {canReview !== null && (
             <div style={styles.reviewForm}>
-              <p style={styles.sectionLabel}>Leave a Review</p>
+              <p style={styles.sectionLabel}>
+                {isEditing ? 'Edit Your Comment' : myReview?.rating ? 'Update Your Review' : 'Leave a Review'}
+              </p>
 
-              {/* Star picker — always available */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
-                {[1, 2, 3, 4, 5].map((n) => {
-                  const filled = n <= (reviewHover || reviewRating);
-                  return (
-                    <Star
-                      key={n}
-                      size={24}
-                      className="pdp-review-star"
-                      fill={filled ? '#FBBF24' : 'none'}
-                      stroke={filled ? '#FBBF24' : 'var(--color-border)'}
-                      style={{ cursor: 'pointer', transition: 'fill var(--transition-fast)' }}
-                      onMouseEnter={() => setReviewHover(n)}
-                      onMouseLeave={() => setReviewHover(0)}
-                      onClick={() => setReviewRating(n)}
-                    />
-                  );
-                })}
-              </div>
+              {/* Star picker — always available, pre-filled if user already rated */}
+              {!isEditing && (
+                <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const filled = n <= (reviewHover || reviewRating);
+                    return (
+                      <Star
+                        key={n}
+                        size={24}
+                        className="pdp-review-star"
+                        fill={filled ? '#FBBF24' : 'none'}
+                        stroke={filled ? '#FBBF24' : 'var(--color-border)'}
+                        style={{ cursor: 'pointer', transition: 'fill var(--transition-fast)' }}
+                        onMouseEnter={() => setReviewHover(n)}
+                        onMouseLeave={() => setReviewHover(0)}
+                        onClick={() => setReviewRating(n)}
+                      />
+                    );
+                  })}
+                  {myReview?.rating && (
+                    <span style={{ marginLeft: 'var(--space-2)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)', alignSelf: 'center' }}>
+                      your rating
+                    </span>
+                  )}
+                </div>
+              )}
 
-              {/* Comment textarea — verified purchasers only */}
-              {canReview === true ? (
+              {/* Comment textarea — verified purchasers or editing existing comment */}
+              {canReview === true || isEditing ? (
                 <textarea
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
-                  placeholder="Share your thoughts..."
+                  placeholder={isEditing ? 'Edit your comment...' : 'Share your thoughts...'}
                   rows={4}
                   style={styles.textarea}
                 />
@@ -709,20 +823,39 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              <button
-                onClick={handleSubmitReview}
-                disabled={reviewSubmitting}
-                style={{
-                  ...styles.submitReviewBtn,
-                  opacity: reviewSubmitting ? 0.6 : 1,
-                  cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {reviewSubmitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
-              </button>
-              <p style={styles.reviewNotice}>
-                Ratings are open to all. Comments require a verified purchase and will be visible after approval.
-              </p>
+              <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+                <button
+                  onClick={handleSubmitReview}
+                  disabled={reviewSubmitting}
+                  style={{
+                    ...styles.submitReviewBtn,
+                    opacity: reviewSubmitting ? 0.6 : 1,
+                    cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {reviewSubmitting
+                    ? 'SUBMITTING...'
+                    : isEditing
+                    ? 'UPDATE COMMENT'
+                    : myReview?.rating
+                    ? 'UPDATE REVIEW'
+                    : 'SUBMIT REVIEW'}
+                </button>
+                {isEditing && (
+                  <button
+                    onClick={handleCancelEdit}
+                    style={styles.cancelEditBtn}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {!isEditing && (
+                <p style={styles.reviewNotice}>
+                  Ratings are open to all. Comments require a verified purchase and will be visible after approval.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -1194,6 +1327,89 @@ const styles = {
     textTransform: 'uppercase',
     cursor: 'pointer',
     transition: 'background-color var(--transition-fast)',
+  },
+
+  cancelEditBtn: {
+    padding: 'var(--space-3) var(--space-5)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    cursor: 'pointer',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+  },
+
+  /* User's own comment card */
+  myCommentCard: {
+    backgroundColor: 'var(--color-white)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--color-border)',
+    padding: 'var(--space-4) var(--space-5)',
+    marginBottom: 'var(--space-5)',
+  },
+  myCommentHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    marginBottom: 'var(--space-3)',
+    flexWrap: 'wrap',
+  },
+  myCommentLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-charcoal)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+  },
+  myCommentBadge: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+  },
+  myCommentActions: {
+    marginLeft: 'auto',
+    display: 'flex',
+    gap: 'var(--space-2)',
+  },
+  myCommentBtn: {
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-1) var(--space-3)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    letterSpacing: 'var(--tracking-wide)',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast)',
+  },
+  myCommentBody: {
+    margin: 0,
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-charcoal)',
+    lineHeight: 1.6,
+    whiteSpace: 'pre-wrap',
+  },
+  myCommentNotice: {
+    margin: 'var(--space-2) 0 0',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-charcoal-light)',
+    fontStyle: 'italic',
   },
 
   /* Lightbox */
