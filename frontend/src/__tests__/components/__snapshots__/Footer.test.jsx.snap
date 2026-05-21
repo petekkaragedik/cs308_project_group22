@@ -1,0 +1,191 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Footer Component Snapshot matches snapshot 1`] = `
+<footer>
+  <style>
+    
+        .footer-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: var(--space-10);
+          max-width: var(--container-max);
+          margin: 0 auto;
+          padding: var(--space-12) var(--container-pad) var(--space-10);
+        }
+        @media (max-width: 640px) {
+          .footer-grid { grid-template-columns: 1fr; text-align: center; }
+          .footer-social { justify-content: center !important; }
+        }
+        .footer-link { color: var(--color-sand); opacity: 0.75; text-decoration: none; display: block; margin-bottom: var(--space-2); transition: opacity 150ms ease; }
+        .footer-link:hover { opacity: 1; }
+        .footer-icon-btn { background: none; border: none; cursor: pointer; color: var(--color-sand); opacity: 0.75; padding: 0; display: flex; align-items: center; transition: opacity 150ms ease; }
+        .footer-icon-btn:hover { opacity: 1; }
+      
+  </style>
+  <div
+    class="footer-grid"
+  >
+    <div>
+      <p
+        style="font-family: var(--font-heading); font-weight: var(--weight-regular); letter-spacing: var(--tracking-wider);"
+      >
+        SCYLLA
+      </p>
+      <p
+        style="margin: 0px; font-family: var(--font-body); font-style: italic; opacity: 0.65;"
+      >
+        Handcrafted for the shore
+      </p>
+    </div>
+    <div>
+      <p
+        style="font-family: var(--font-body); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-wide); text-transform: uppercase; opacity: 0.5;"
+      >
+        Explore
+      </p>
+      <a
+        class="footer-link"
+        href="/"
+        style="font-family: var(--font-body);"
+      >
+        Home
+      </a>
+      <a
+        class="footer-link"
+        href="/products"
+        style="font-family: var(--font-body);"
+      >
+        Shop
+      </a>
+      <a
+        class="footer-link"
+        href="/our-story"
+        style="font-family: var(--font-body);"
+      >
+        Our Story
+      </a>
+    </div>
+    <div>
+      <p
+        style="font-family: var(--font-body); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-wide); text-transform: uppercase; opacity: 0.5;"
+      >
+        Follow us
+      </p>
+      <div
+        class="footer-social"
+        style="display: flex; gap: var(--space-4); align-items: center;"
+      >
+        <button
+          aria-label="Instagram"
+          class="footer-icon-btn"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-camera"
+            fill="none"
+            height="20"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"
+            />
+            <circle
+              cx="12"
+              cy="13"
+              r="3"
+            />
+          </svg>
+        </button>
+        <button
+          aria-label="Pinterest"
+          class="footer-icon-btn"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-share2 lucide-share-2"
+            fill="none"
+            height="20"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="18"
+              cy="5"
+              r="3"
+            />
+            <circle
+              cx="6"
+              cy="12"
+              r="3"
+            />
+            <circle
+              cx="18"
+              cy="19"
+              r="3"
+            />
+            <line
+              x1="8.59"
+              x2="15.42"
+              y1="13.51"
+              y2="17.49"
+            />
+            <line
+              x1="15.41"
+              x2="8.59"
+              y1="6.51"
+              y2="10.49"
+            />
+          </svg>
+        </button>
+        <button
+          aria-label="TikTok"
+          class="footer-icon-btn"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-music2 lucide-music-2"
+            fill="none"
+            height="20"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="8"
+              cy="18"
+              r="4"
+            />
+            <path
+              d="M12 18V2l7 4"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div
+    style="border-top: 1px solid rgba(245, 242, 237, 0.12); text-align: center;"
+  >
+    <p
+      style="margin: 0px; font-family: var(--font-body); opacity: 0.4;"
+    >
+      © 2026 Scylla. All rights reserved.
+    </p>
+  </div>
+</footer>
+`;
