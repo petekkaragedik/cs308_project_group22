@@ -13,6 +13,7 @@ const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
 const createOrderRoutes = require("./routes/orders");
 const createReturnRoutes = require("./routes/returns");
+const createDiscountRoutes = require("./routes/discounts");
 const { encrypt, decrypt } = require("./utils/encrypt");
 
 const app = express();
@@ -1307,6 +1308,7 @@ app.put("/api/product-manager/orders/:id/status", requireAuth, requireRole('prod
 
 app.use("/api/orders", createOrderRoutes(db, requireAuth));
 app.use("/api/returns", createReturnRoutes(db, requireAuth, requireRole));
+app.use("/api/discounts", createDiscountRoutes(db, requireAuth, requireRole));
 if (require.main === module) {
   app.listen(3001, () => {
     console.log("Server running on port 3001");

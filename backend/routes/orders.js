@@ -1,6 +1,7 @@
 const express = require('express');
 const { generateInvoicePdfBuffer } = require('../services/invoicePdf');
 const { sendInvoiceEmail } = require('../services/mailInvoice');
+const { resolveBestDiscount } = require('../services/discountCalculator');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -89,6 +90,46 @@ module.exports = function createOrderRoutes(db, requireAuth) {
     try {
       await conn.beginTransaction();
 
+      const productIds = normalizedItems.map(item => item.product_id);
+
+      const [productDiscounts] = await conn.query(`
+        SELECT
+          dc.id,
+          dc.name,
+          dc.discount_type,
+          dc.discount_value,
+          dcp.product_id
+        FROM discount_campaigns dc
+        JOIN discount_campaign_products dcp ON dc.id = dcp.campaign_id
+        WHERE dc.is_active = 1
+          AND NOW() BETWEEN dc.start_date AND dc.end_date
+          AND dcp.product_id IN (?)
+      `, [productIds]);
+
+      const [categoryDiscounts] = await conn.query(`
+        SELECT
+          dc.id,
+          dc.name,
+          dc.discount_type,
+          dc.discount_value,
+          p.id as product_id
+        FROM discount_campaigns dc
+        JOIN discount_campaign_categories dcc ON dc.id = dcc.campaign_id
+        JOIN products p ON p.categoryName = dcc.category_name
+        WHERE dc.is_active = 1
+          AND NOW() BETWEEN dc.start_date AND dc.end_date
+          AND p.id IN (?)
+      `, [productIds]);
+
+      const allDiscounts = [...productDiscounts, ...categoryDiscounts];
+      const discountsByProduct = {};
+      for (const disc of allDiscounts) {
+        if (!discountsByProduct[disc.product_id]) {
+          discountsByProduct[disc.product_id] = [];
+        }
+        discountsByProduct[disc.product_id].push(disc);
+      }
+
       const resolvedLines = [];
       for (const line of normalizedItems) {
         const [rows] = await conn.query(
@@ -107,7 +148,26 @@ module.exports = function createOrderRoutes(db, requireAuth) {
             message: `Insufficient stock for ${p.name}. Available: ${stock}`,
           });
         }
-        const unit = roundMoney(p.price);
+
+        const basePrice = roundMoney(p.price);
+        let unit = basePrice;
+        let discountInfo = null;
+
+        const applicableDiscounts = discountsByProduct[line.product_id];
+        if (applicableDiscounts && applicableDiscounts.length > 0) {
+          const bestDiscount = resolveBestDiscount(basePrice, applicableDiscounts);
+          if (bestDiscount) {
+            unit = roundMoney(bestDiscount.discountedPrice);
+            discountInfo = {
+              campaign_id: bestDiscount.campaign.id,
+              discount_type: bestDiscount.campaign.discount_type,
+              discount_value: bestDiscount.campaign.discount_value,
+              discount_amount: roundMoney(bestDiscount.savingsAmount),
+              original_price: basePrice
+            };
+          }
+        }
+
         const lineTotal = roundMoney(unit * line.quantity);
         resolvedLines.push({
           product_id: line.product_id,
@@ -116,6 +176,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
           quantity: line.quantity,
           unit_price: unit,
           line_total: lineTotal,
+          discount: discountInfo
         });
       }
 
@@ -133,8 +194,11 @@ module.exports = function createOrderRoutes(db, requireAuth) {
 
       for (const line of resolvedLines) {
         await conn.query(
-          `INSERT INTO order_items (order_id, product_id, product_name, size, quantity, unit_price, line_total)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO order_items (
+            order_id, product_id, product_name, size, quantity, unit_price, line_total,
+            discount_campaign_id, discount_type, discount_value, discount_amount, original_price
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
             line.product_id,
@@ -143,6 +207,11 @@ module.exports = function createOrderRoutes(db, requireAuth) {
             line.quantity,
             line.unit_price,
             line.line_total,
+            line.discount?.campaign_id || null,
+            line.discount?.discount_type || null,
+            line.discount?.discount_value || null,
+            line.discount?.discount_amount || null,
+            line.discount?.original_price || null
           ]
         );
         await conn.query(
