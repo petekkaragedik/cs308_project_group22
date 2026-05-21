@@ -1145,16 +1145,17 @@ app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'
 // GET /api/admin/stock-alerts — products at or below LOW_STOCK_THRESHOLD
 app.get("/api/admin/stock-alerts", requireAuth, requireRole('product_manager'), async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT id AS productId, name, model, categoryName, quantityInStock, price
+    const [alertRows] = await db.query(
+      `SELECT id AS productId, name, model, categoryName, quantityInStock, price,
+              JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS firstImage
        FROM products
        WHERE quantityInStock <= ?
        ORDER BY quantityInStock ASC`,
       [LOW_STOCK_THRESHOLD]
     );
 
-    const outOfStock = rows.filter(r => r.quantityInStock === 0);
-    const lowStock = rows.filter(r => r.quantityInStock > 0);
+    const outOfStock = alertRows.filter(r => r.quantityInStock === 0);
+    const lowStock = alertRows.filter(r => r.quantityInStock > 0);
 
     res.json({
       outOfStock,
@@ -1174,6 +1175,7 @@ app.get("/api/product-manager/dashboard-summary", requireAuth, requireRole('prod
   try {
     const [results] = await db.query(`
       SELECT
+        (SELECT COUNT(*) FROM products) as total_products,
         (SELECT COUNT(*) FROM comments WHERE status = 'pending') as pending_comments,
         (SELECT COUNT(*) FROM orders WHERE status = 'processing') as processing_orders,
         (SELECT COUNT(*) FROM orders WHERE status = 'in_transit') as in_transit_orders,
@@ -1191,7 +1193,8 @@ app.get("/api/product-manager/dashboard-summary", requireAuth, requireRole('prod
 app.get("/api/product-manager/stock-overview", requireAuth, requireRole('product_manager'), async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT id, name, model, quantityInStock, price, categoryName, color
+      SELECT id, name, model, quantityInStock, price, categoryName, color,
+             JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS firstImage
       FROM products
       ORDER BY quantityInStock ASC, name ASC
     `);
