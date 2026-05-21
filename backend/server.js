@@ -658,33 +658,38 @@ app.get("/api/products", async (req, res) => {
   try {
     const { sort } = req.query;
 
+    // Pagination: applied in SQL after filtering/sorting (not JS array slicing)
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 12);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
     // Sort modes: price_asc = cheapest first, price_desc = most expensive first,
     // popularity = highest average rating first; default = no ordering.
-    let query;
+    let dataQuery;
     if (sort === "price_asc") {
-      query = "SELECT * FROM products ORDER BY price ASC";
+      dataQuery = "SELECT * FROM products ORDER BY price ASC LIMIT ? OFFSET ?";
     } else if (sort === "price_desc") {
-      query = "SELECT * FROM products ORDER BY price DESC";
+      dataQuery = "SELECT * FROM products ORDER BY price DESC LIMIT ? OFFSET ?";
     } else if (sort === "popularity") {
-      query = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
+      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
                FROM products p
                LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
                ON r.product_id = p.id
-               ORDER BY avg_rating DESC`;
+               ORDER BY avg_rating DESC LIMIT ? OFFSET ?`;
     } else {
-      query = "SELECT * FROM products";
+      dataQuery = "SELECT * FROM products LIMIT ? OFFSET ?";
     }
 
-    const [rows] = await db.query(query);
+    const [[countRows], [rows]] = await Promise.all([
+      db.query("SELECT COUNT(*) AS total FROM products"),
+      db.query(dataQuery, [limit, offset]),
+    ]);
 
-    const formattedRows = rows.map(product => {
-      return {
-        ...product,
-        images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
-      };
-    });
+    const products = rows.map(product => ({
+      ...product,
+      images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
+    }));
 
-    res.json(formattedRows);
+    res.json({ products, total: countRows[0].total });
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch products from database" });
