@@ -8,7 +8,7 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const productRoutes = require('./routes/products');
+const createProductRoutes = require('./routes/products');
 const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
 const createOrderRoutes = require("./routes/orders");
@@ -22,7 +22,6 @@ const app = express();
 // Allow browser calls from CRA (any port / localhost vs 127.0.0.1) when using REACT_APP_API_URL
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use('/api/products', productRoutes);
 
 
 // db connection
@@ -1377,6 +1376,8 @@ app.use("/api/orders", createOrderRoutes(db, requireAuth));
 app.use("/api/returns", createReturnRoutes(db, requireAuth, requireRole));
 app.use("/api/discounts", createDiscountRoutes(db, requireAuth, requireRole));
 app.use("/api/notifications", createNotificationRoutes(db, requireAuth));
+app.use("/api/products", createProductRoutes(db, requireAuth, requireRole));
+
 if (require.main === module) {
   app.listen(3001, () => {
     console.log("Server running on port 3001");

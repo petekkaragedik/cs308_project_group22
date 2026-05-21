@@ -34,6 +34,12 @@ const NAV_CARDS = [
     description: 'Review and process customer refund requests.',
     path: '/sales-manager/refunds',
   },
+  {
+    key: 'bulk-pricing',
+    label: 'Bulk Pricing Manager',
+    description: 'Update prices or create discounts for multiple products at once.',
+    path: '/sales-manager/bulk-pricing',
+  },
 ];
 
 export default function SalesManagerDashboardPage() {

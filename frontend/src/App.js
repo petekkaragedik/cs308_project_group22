@@ -20,6 +20,7 @@ import SalesManagerDiscountPage from './pages/SalesManagerDiscountPage';
 import SalesManagerInvoicePage from './pages/SalesManagerInvoicePage';
 import SalesManagerRevenuePage from './pages/SalesManagerRevenuePage';
 import SalesManagerRefundsPage from './pages/SalesManagerRefundsPage';
+import SalesManagerBulkPricingPage from './pages/SalesManagerBulkPricingPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import { CartProvider } from './context/CartContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -44,6 +45,7 @@ const PAGE_TITLES = {
   '/sales-manager/invoices': 'Scylla | Invoices',
   '/sales-manager/revenue': 'Scylla | Revenue',
   '/sales-manager/refunds': 'Scylla | Refunds',
+  '/sales-manager/bulk-pricing': 'Scylla | Bulk Pricing',
 };
 
 function PageTitle() {
@@ -83,6 +85,7 @@ function App() {
             <Route path="/sales-manager/invoices" element={<SalesManagerInvoicePage />} />
             <Route path="/sales-manager/revenue" element={<SalesManagerRevenuePage />} />
             <Route path="/sales-manager/refunds" element={<SalesManagerRefundsPage />} />
+            <Route path="/sales-manager/bulk-pricing" element={<SalesManagerBulkPricingPage />} />
             <Route path="/" element={<LandingPage />} />
           </Routes>
         </div>
