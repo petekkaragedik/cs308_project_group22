@@ -75,6 +75,8 @@ app.get("/", (req, res) => {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const LOW_STOCK_THRESHOLD = 5;
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
@@ -1137,6 +1139,31 @@ app.delete("/api/admin/comments/:id", requireAuth, requireRole('product_manager'
   } catch (error) {
     console.error("Delete comment error:", error);
     res.status(500).json({ message: "Failed to delete comment" });
+  }
+});
+
+// GET /api/admin/stock-alerts — products at or below LOW_STOCK_THRESHOLD
+app.get("/api/admin/stock-alerts", requireAuth, requireRole('product_manager'), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id AS productId, name, model, categoryName, quantityInStock, price
+       FROM products
+       WHERE quantityInStock <= ?
+       ORDER BY quantityInStock ASC`,
+      [LOW_STOCK_THRESHOLD]
+    );
+
+    const outOfStock = rows.filter(r => r.quantityInStock === 0);
+    const lowStock = rows.filter(r => r.quantityInStock > 0);
+
+    res.json({
+      outOfStock,
+      lowStock,
+      totalAlerts: outOfStock.length + lowStock.length,
+    });
+  } catch (error) {
+    console.error("Stock alerts error:", error);
+    res.status(500).json({ message: "Failed to fetch stock alerts" });
   }
 });
 
