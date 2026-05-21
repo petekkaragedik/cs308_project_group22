@@ -47,8 +47,8 @@ export default function LandingPage() {
   useEffect(() => {
     fetch('/api/products')
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => {
-        setFeatured(pickFeatured(data, 4));
+      .then((resp) => {
+        setFeatured(pickFeatured(resp.data ?? resp, 4));
         setLoading(false);
       })
       .catch(() => setLoading(false));
