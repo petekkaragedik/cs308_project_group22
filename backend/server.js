@@ -1417,6 +1417,113 @@ app.put("/api/product-manager/orders/:id/status", requireAuth, requireRole('prod
   }
 });
 
+// ─── Product Management (Product Manager CRUD) ────────────
+
+// POST /api/product-manager/products — add new product
+app.post("/api/product-manager/products", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const {
+    name, model, serialNumber, description, quantityInStock,
+    price, warrantyStatus, distributorInfo, categoryName,
+    color, size, gender, vatRate, images
+  } = req.body;
+
+  if (!name || !model || price === undefined || price === null) {
+    return res.status(400).json({ message: "name, model, and price are required" });
+  }
+  const numericPrice = Number(price);
+  if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+    return res.status(400).json({ message: "price must be a non-negative number" });
+  }
+
+  const { randomUUID } = require('crypto');
+  const id = randomUUID();
+  const imagesJson = JSON.stringify(Array.isArray(images) ? images : []);
+
+  try {
+    await db.query(
+      `INSERT INTO products (id, name, model, serialNumber, description, quantityInStock, price,
+         warrantyStatus, distributorInfo, categoryName, color, size, gender, vatRate, images, popularity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        id, name, model, serialNumber || null, description || null,
+        Number(quantityInStock) || 0, numericPrice,
+        warrantyStatus ? 1 : 0, distributorInfo || 'scyllastore',
+        categoryName || null, color || null, size || null,
+        gender || null, Number(vatRate) || 10, imagesJson
+      ]
+    );
+    const [rows] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
+    const product = { ...rows[0] };
+    if (typeof product.images === 'string') product.images = JSON.parse(product.images);
+    res.status(201).json(product);
+  } catch (error) {
+    console.error("Create product error:", error);
+    res.status(500).json({ message: "Failed to create product" });
+  }
+});
+
+// PUT /api/product-manager/products/:id — update product details
+app.put("/api/product-manager/products/:id", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const { id } = req.params;
+  const {
+    name, model, serialNumber, description, quantityInStock,
+    price, warrantyStatus, distributorInfo, categoryName,
+    color, size, gender, vatRate, images
+  } = req.body;
+
+  if (!name || !model || price === undefined || price === null) {
+    return res.status(400).json({ message: "name, model, and price are required" });
+  }
+  const numericPrice = Number(price);
+  if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+    return res.status(400).json({ message: "price must be a non-negative number" });
+  }
+
+  const imagesJson = JSON.stringify(Array.isArray(images) ? images : []);
+
+  try {
+    const [result] = await db.query(
+      `UPDATE products SET
+         name=?, model=?, serialNumber=?, description=?, quantityInStock=?,
+         price=?, warrantyStatus=?, distributorInfo=?, categoryName=?,
+         color=?, size=?, gender=?, vatRate=?, images=?
+       WHERE id=?`,
+      [
+        name, model, serialNumber || null, description || null,
+        Number(quantityInStock) || 0, numericPrice,
+        warrantyStatus ? 1 : 0, distributorInfo || 'scyllastore',
+        categoryName || null, color || null, size || null,
+        gender || null, Number(vatRate) || 10, imagesJson, id
+      ]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    const [rows] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
+    const product = { ...rows[0] };
+    if (typeof product.images === 'string') product.images = JSON.parse(product.images);
+    res.json(product);
+  } catch (error) {
+    console.error("Update product error:", error);
+    res.status(500).json({ message: "Failed to update product" });
+  }
+});
+
+// DELETE /api/product-manager/products/:id — remove product
+app.delete("/api/product-manager/products/:id", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [result] = await db.query('DELETE FROM products WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    res.json({ message: "Product deleted successfully" });
+  } catch (error) {
+    console.error("Delete product error:", error);
+    res.status(500).json({ message: "Failed to delete product" });
+  }
+});
+
 app.use("/api/orders", createOrderRoutes(db, requireAuth));
 app.use("/api/returns", createReturnRoutes(db, requireAuth, requireRole));
 app.use("/api/discounts", createDiscountRoutes(db, requireAuth, requireRole));
