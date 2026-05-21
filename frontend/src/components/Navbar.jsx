@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Search, Heart, ShoppingCart, User, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { apiUrl } from '../apiBase';
+import NotificationBell from './NotificationBell';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -42,6 +43,7 @@ export default function Navbar() {
           <Link to="/wishlist" style={styles.iconBtn} aria-label="Wishlist">
             <Heart size={22} />
           </Link>
+          <NotificationBell />
           <Link to="/cart" style={styles.cartBtn} aria-label="Cart">
             <ShoppingCart size={22} />
             {cartCount > 0 && (

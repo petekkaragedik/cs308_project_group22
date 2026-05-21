@@ -1,5 +1,6 @@
 const express = require('express');
 const { calculateDiscount, resolveBestDiscount } = require('../services/discountCalculator');
+const { detectWishlistDiscounts } = require('../services/wishlistNotificationService');
 
 module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
   const router = express.Router();
@@ -100,6 +101,11 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
         'SELECT * FROM discount_campaigns WHERE id = ?',
         [campaignId]
       );
+
+      // Trigger wishlist notifications asynchronously (don't block response)
+      detectWishlistDiscounts(campaignId).catch(err => {
+        console.error('Failed to create wishlist notifications:', err);
+      });
 
       res.status(201).json({
         message: 'Campaign created successfully',
@@ -311,6 +317,11 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
       await conn.commit();
 
       const [updated] = await conn.query('SELECT * FROM discount_campaigns WHERE id = ?', [id]);
+
+      // Trigger wishlist notifications asynchronously (don't block response)
+      detectWishlistDiscounts(id).catch(err => {
+        console.error('Failed to create wishlist notifications:', err);
+      });
 
       res.json({
         message: 'Campaign updated successfully',

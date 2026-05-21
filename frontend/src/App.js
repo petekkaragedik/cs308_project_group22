@@ -11,6 +11,7 @@ import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import InvoicePage from './pages/InvoicePage';
 import WishlistPage from './pages/WishlistPage';
+import NotificationsPage from './pages/NotificationsPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminModerationPage from './pages/AdminModerationPage';
 import ProductManagerDashboardPage from './pages/ProductManagerDashboardPage';
@@ -21,6 +22,7 @@ import SalesManagerRevenuePage from './pages/SalesManagerRevenuePage';
 import SalesManagerRefundsPage from './pages/SalesManagerRefundsPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import { CartProvider } from './context/CartContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 const PAGE_TITLES = {
   '/': 'Scylla',
@@ -32,6 +34,7 @@ const PAGE_TITLES = {
   '/cart': 'Scylla | Cart',
   '/checkout': 'Scylla | Checkout',
   '/wishlist': 'Scylla | Wishlist',
+  '/notifications': 'Scylla | Notifications',
   '/profile': 'Scylla | Profile',
   '/orders': 'Scylla | Orders',
   '/admin/moderation': 'Scylla | Moderation',
@@ -54,11 +57,12 @@ function PageTitle() {
 
 function App() {
   return (
-    <CartProvider>
-      <Router>
-        <PageTitle />
-        <div style={{ margin: 0, padding: 0 }}>
-          <Routes>
+    <NotificationProvider>
+      <CartProvider>
+        <Router>
+          <PageTitle />
+          <div style={{ margin: 0, padding: 0 }}>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -69,6 +73,7 @@ function App() {
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/invoice/:orderId" element={<InvoicePage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/orders" element={<OrderHistoryPage />} />
             <Route path="/admin/moderation" element={<AdminModerationPage />} />
@@ -82,7 +87,8 @@ function App() {
           </Routes>
         </div>
       </Router>
-    </CartProvider>
+      </CartProvider>
+    </NotificationProvider>
   );
 }
 
