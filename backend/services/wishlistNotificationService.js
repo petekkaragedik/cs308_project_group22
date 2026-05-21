@@ -1,14 +1,18 @@
-const db = require('../db');
-
 /**
- * Detect wishlisted products affected by a campaign and create notifications
- * @param {number} campaignId - The campaign ID to process
- * @returns {Promise<number>} - Number of notifications created
+ * Create wishlist notification service
+ * @param {object} db - Database connection pool
+ * @returns {object} - Service methods
  */
-async function detectWishlistDiscounts(campaignId) {
-  let conn;
-  try {
-    conn = await db.getConnection();
+function createWishlistNotificationService(db) {
+  /**
+   * Detect wishlisted products affected by a campaign and create notifications
+   * @param {number} campaignId - The campaign ID to process
+   * @returns {Promise<number>} - Number of notifications created
+   */
+  async function detectWishlistDiscounts(campaignId) {
+    let conn;
+    try {
+      conn = await db.getConnection();
 
     // Step 1: Fetch campaign details
     const [campaigns] = await conn.query(
@@ -131,6 +135,9 @@ async function detectWishlistDiscounts(campaignId) {
   }
 }
 
-module.exports = {
-  detectWishlistDiscounts
-};
+  return {
+    detectWishlistDiscounts
+  };
+}
+
+module.exports = createWishlistNotificationService;
