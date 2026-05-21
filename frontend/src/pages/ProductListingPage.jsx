@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, ChevronUp, CheckCheck } from 'lucide-react';
 import Footer from '../components/Footer';
 import Navbar from '../components/Navbar';
+import Pagination from '../components/Pagination';
 import { useCart } from '../context/CartContext';
 import { apiUrl } from '../apiBase';
 
 /* ─── Constants ───────────────────────────────────────── */
+
 
 const FEATURED = ['All', 'Bikini Set', 'Top & Bottom Set', 'Dress', 'Pareo', 'Bustier'];
 
@@ -189,6 +191,9 @@ export default function ProductListingPage() {
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('scylla_sort') || '');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
+  const [pageSize, setPageSize] = useState(20);
   const [allCategories, setAllCategories] = useState(['All']);
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -212,22 +217,23 @@ export default function ProductListingPage() {
     else localStorage.removeItem('scylla_sort');
   }, [sortBy]);
 
-  // Fetch products: all or filtered by category, with optional sort applied to both
+  // Fetch products: all or filtered by category, with sort and pagination params
   useEffect(() => {
     setLoading(true);
     setError(null);
-    const params = sortBy ? `?sort=${sortBy}` : '';
+    const params = new URLSearchParams({ limit: pageSize, offset: (currentPage - 1) * pageSize });
+    if (sortBy) params.set('sort', sortBy);
     const url = activeCategory === 'All'
-      ? apiUrl(`/api/products${params}`)
-      : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}${params}`);
+      ? apiUrl(`/api/products?${params}`)
+      : apiUrl(`/api/products/category/${encodeURIComponent(activeCategory)}?${params}`);
     fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch');
         return res.json();
       })
-      .then((data) => { setProducts(data); setLoading(false); })
+      .then((resp) => { setProducts(resp.data); setPagination(resp.pagination); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [activeCategory, sortBy]);
+  }, [activeCategory, sortBy, currentPage, pageSize]);
 
   useEffect(() => {
     function onScroll() {
@@ -279,6 +285,7 @@ export default function ProductListingPage() {
 
   function selectCategory(cat) {
     setActiveCategory(cat);
+    setCurrentPage(1);
     setMoreOpen(false);
   }
 
@@ -426,7 +433,7 @@ export default function ProductListingPage() {
                       <li
                         key={opt.value}
                         className="sort-opt"
-                        onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                        onClick={() => { setSortBy(opt.value); setCurrentPage(1); setSortOpen(false); }}
                         style={{
                           ...styles.sortOption,
                           ...(sortBy === opt.value ? styles.sortOptionActive : {}),
@@ -442,9 +449,22 @@ export default function ProductListingPage() {
           </div>
         </div>
 
-        {/* ── Product count ── */}
+        {/* ── Product count + page size toggle ── */}
         <div style={styles.countRow}>
           <span style={styles.countText}>Showing {cards.length} products</span>
+          <div style={styles.pageSizeGroup}>
+            <span style={styles.sortLabel}>Show:</span>
+            {[20, 50].map((n) => (
+              <button
+                key={n}
+                onClick={() => { setPageSize(n); setCurrentPage(1); }}
+                style={{ ...styles.pageSizeBtn, ...(pageSize === n ? styles.pageSizeBtnActive : {}) }}
+              >
+                {n}
+              </button>
+            ))}
+            <span style={styles.sortLabel}>products per page</span>
+          </div>
         </div>
 
         {/* ── Product Grid ── */}
@@ -463,6 +483,18 @@ export default function ProductListingPage() {
             />
           ))}
         </div>
+
+        {/* ── Pagination ── */}
+        {pagination && Math.ceil(pagination.total / pageSize) > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(pagination.total / pageSize)}
+            onPageChange={(page) => {
+              setCurrentPage(page);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
       </div>
 
       <Footer />
@@ -1086,8 +1118,33 @@ const styles = {
   /* ── Product count ── */
   countRow: {
     display: 'flex',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 'var(--space-4)',
+  },
+  pageSizeGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+  },
+  pageSizeBtn: {
+    minWidth: '36px',
+    height: '28px',
+    padding: '0 var(--space-3)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-full)',
+    background: 'transparent',
+    color: 'var(--color-charcoal)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    cursor: 'pointer',
+    transition: 'var(--transition-base)',
+  },
+  pageSizeBtnActive: {
+    backgroundColor: 'var(--color-blue)',
+    borderColor: 'var(--color-blue)',
+    fontWeight: 'var(--weight-semibold)',
   },
   countText: {
     fontFamily: 'var(--font-body)',

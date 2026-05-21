@@ -689,7 +689,11 @@ app.get("/api/products", async (req, res) => {
       images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
     }));
 
-    res.json({ products, total: countRows[0].total });
+    const total = countRows[0].total;
+    res.json({
+      data: products,
+      pagination: { total, limit, offset, hasMore: offset + products.length < total },
+    });
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch products from database" });
@@ -701,31 +705,42 @@ app.get("/api/products/category/:categoryName", async (req, res) => {
     const { categoryName } = req.params;
     const { sort } = req.query;
 
+    // Pagination: applied in SQL after filtering/sorting
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 12);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
     // Reuse the same three sort modes as /api/products
-    let query;
+    let dataQuery;
     if (sort === "price_asc") {
-      query = "SELECT * FROM products WHERE categoryName = ? ORDER BY price ASC";
+      dataQuery = "SELECT * FROM products WHERE categoryName = ? ORDER BY price ASC LIMIT ? OFFSET ?";
     } else if (sort === "price_desc") {
-      query = "SELECT * FROM products WHERE categoryName = ? ORDER BY price DESC";
+      dataQuery = "SELECT * FROM products WHERE categoryName = ? ORDER BY price DESC LIMIT ? OFFSET ?";
     } else if (sort === "popularity") {
-      query = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
+      dataQuery = `SELECT p.*, COALESCE(r.avg_rating, 0) AS avg_rating
                FROM products p
                LEFT JOIN (SELECT product_id, AVG(rating) AS avg_rating FROM ratings GROUP BY product_id) r
                ON r.product_id = p.id
                WHERE p.categoryName = ?
-               ORDER BY avg_rating DESC`;
+               ORDER BY avg_rating DESC LIMIT ? OFFSET ?`;
     } else {
-      query = "SELECT * FROM products WHERE categoryName = ?";
+      dataQuery = "SELECT * FROM products WHERE categoryName = ? LIMIT ? OFFSET ?";
     }
 
-    const [rows] = await db.query(query, [categoryName]);
+    const [[countRows], [rows]] = await Promise.all([
+      db.query("SELECT COUNT(*) AS total FROM products WHERE categoryName = ?", [categoryName]),
+      db.query(dataQuery, [categoryName, limit, offset]),
+    ]);
 
-    const formattedRows = rows.map(product => ({
+    const total = countRows[0].total;
+    const data = rows.map(product => ({
       ...product,
       images: typeof product.images === 'string' ? JSON.parse(product.images) : product.images
     }));
 
-    res.json(formattedRows);
+    res.json({
+      data,
+      pagination: { total, limit, offset, hasMore: offset + data.length < total },
+    });
   } catch (error) {
     console.error("Database query error:", error);
     res.status(500).json({ message: "Failed to fetch products by category" });
