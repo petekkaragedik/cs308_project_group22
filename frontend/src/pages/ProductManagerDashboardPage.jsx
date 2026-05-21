@@ -324,9 +324,16 @@ export default function ProductManagerDashboardPage() {
     setProductModal('add');
   }
 
-  function openEditProduct(product) {
-    setEditingProduct(product);
+  async function openEditProduct(product) {
     setFormError('');
+    let fullProduct = product;
+    try {
+      const res = await fetch(apiUrl(`/api/products/${product.id}`), { headers: authHeaders() });
+      if (res.ok) fullProduct = await res.json();
+    } catch {
+      /* fall back to partial data */
+    }
+    setEditingProduct(fullProduct);
     setProductModal('edit');
   }
 
