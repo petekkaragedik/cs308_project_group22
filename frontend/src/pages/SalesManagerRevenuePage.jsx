@@ -17,6 +17,19 @@ function fmt(amount) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(amount);
 }
 
+function downloadCsv(rows, filename) {
+  const header = ['Period', 'Orders', 'Gross Revenue (TRY)', 'Discount Loss (TRY)', 'Net Profit (TRY)'];
+  const lines = [
+    header.join(','),
+    ...rows.map((r) => [r.period, r.orderCount, r.revenue, r.discountLoss, r.profit].join(',')),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -32,11 +45,8 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 const tooltipStyle = {
-  backgroundColor: 'var(--color-white)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 8,
-  padding: '10px 14px',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  backgroundColor: 'var(--color-white)', border: '1px solid var(--color-border)',
+  borderRadius: 8, padding: '10px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
 };
 
 export default function SalesManagerRevenuePage() {
@@ -77,6 +87,11 @@ export default function SalesManagerRevenuePage() {
 
   useEffect(() => { if (authState === 'authorized') fetchData(); }, [authState, fetchData]);
 
+  const handleExportCsv = () => {
+    const suffix = startDate || endDate ? `_${startDate || 'start'}_to_${endDate || 'end'}` : '_all';
+    downloadCsv(chartData, `revenue${suffix}.csv`);
+  };
+
   if (authState === 'checking') return <><Navbar /><div style={styles.center}><span style={styles.centerText}>Loading...</span></div><Footer /></>;
   if (authState === 'unauthorized') return <><Navbar /><div style={styles.center}><h1 style={styles.deniedTitle}>Access Denied</h1><p style={styles.deniedText}>This page is only available to sales managers.</p></div><Footer /></>;
 
@@ -85,8 +100,15 @@ export default function SalesManagerRevenuePage() {
       <Navbar />
       <div style={styles.page}>
         <button style={styles.backBtn} onClick={() => navigate('/sales-manager/dashboard')}>← Back to Dashboard</button>
-        <h1 style={styles.title}>Revenue & Profit Chart</h1>
-        <p style={styles.subtitle}>Analyse revenue, discount loss, and net profit over time.</p>
+        <div style={styles.titleRow}>
+          <div>
+            <h1 style={styles.title}>Revenue & Profit Chart</h1>
+            <p style={styles.subtitle}>Analyse revenue, discount loss, and net profit over time.</p>
+          </div>
+          {chartData.length > 0 && (
+            <button style={styles.exportBtn} onClick={handleExportCsv}>Export CSV</button>
+          )}
+        </div>
 
         {/* Filter bar */}
         <div style={styles.filterBar}>
@@ -105,9 +127,7 @@ export default function SalesManagerRevenuePage() {
               <option value="month">Month</option>
             </select>
           </div>
-          <button style={styles.filterBtn} onClick={fetchData} disabled={loading}>
-            {loading ? 'Loading…' : 'Apply'}
-          </button>
+          <button style={styles.filterBtn} onClick={fetchData} disabled={loading}>{loading ? 'Loading…' : 'Apply'}</button>
           {(startDate || endDate) && (
             <button style={styles.clearBtn} onClick={() => { setStartDate(''); setEndDate(''); }}>Clear</button>
           )}
@@ -123,8 +143,8 @@ export default function SalesManagerRevenuePage() {
               { label: 'Net Profit', value: totals.profit, highlight: true },
             ].map(({ label, value, raw, negative, highlight }) => (
               <div key={label} style={{ ...styles.summaryCard, ...(highlight ? styles.highlightCard : {}) }}>
-                <span style={styles.summaryLabel}>{label}</span>
-                <span style={{ ...styles.summaryValue, ...(negative ? { color: '#dc2626' } : {}), ...(highlight ? { color: 'var(--color-white)' } : {}) }}>
+                <span style={{ ...styles.summaryLabel, ...(highlight ? { color: 'rgba(255,255,255,0.6)' } : {}) }}>{label}</span>
+                <span style={{ ...styles.summaryValue, ...(negative ? { color: '#dc2626' } : {}), ...(highlight ? { color: '#fff' } : {}) }}>
                   {raw ? value : fmt(value)}
                 </span>
               </div>
@@ -193,7 +213,9 @@ export default function SalesManagerRevenuePage() {
 const styles = {
   page: { minHeight: '70vh', backgroundColor: 'var(--color-sand)', padding: 'var(--space-10) var(--container-pad)', maxWidth: '1200px', margin: '0 auto' },
   backBtn: { background: 'none', border: 'none', padding: '0 0 var(--space-4) 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', cursor: 'pointer', display: 'block' },
+  titleRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' },
   title: { margin: 0, fontFamily: 'var(--font-heading)', fontSize: 'var(--text-3xl)', fontWeight: 'var(--weight-regular)', color: 'var(--color-black)', letterSpacing: 'var(--tracking-wide)' },
+  exportBtn: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', backgroundColor: 'transparent', color: 'var(--color-charcoal)', border: '1px solid var(--color-charcoal)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-5)', cursor: 'pointer', whiteSpace: 'nowrap' },
   subtitle: { margin: 'var(--space-2) 0 var(--space-6) 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-light)' },
   filterBar: { display: 'flex', alignItems: 'flex-end', gap: 'var(--space-4)', flexWrap: 'wrap', marginBottom: 'var(--space-6)', backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' },
   filterGroup: { display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' },
