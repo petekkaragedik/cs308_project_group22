@@ -641,8 +641,9 @@ export default function ProductListingPage() {
                 currentPage={currentPage}
                 totalPages={Math.ceil(pagination.total / pageSize)}
                 onPageChange={(page) => {
+                  sessionStorage.removeItem('scylla_scroll');
                   setCurrentPage(page);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  window.scrollTo(0, 0);
                 }}
               />
             )}
