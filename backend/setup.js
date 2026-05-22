@@ -202,6 +202,74 @@ async function setup() {
   }
   console.log('Order items discount columns ready');
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS discount_campaigns (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      discount_type ENUM('percentage', 'fixed_amount') NOT NULL DEFAULT 'percentage',
+      discount_value DECIMAL(10,2) NOT NULL,
+      start_date DATETIME NOT NULL,
+      end_date DATETIME NOT NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_by INT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX idx_active_dates (is_active, start_date, end_date),
+      INDEX idx_created_by (created_by)
+    )
+  `);
+  console.log('Discount campaigns table ready');
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS discount_campaign_products (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      campaign_id INT NOT NULL,
+      product_id VARCHAR(64) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES discount_campaigns(id) ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_campaign_product (campaign_id, product_id),
+      INDEX idx_product (product_id)
+    )
+  `);
+  console.log('Discount campaign products table ready');
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS discount_campaign_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      campaign_id INT NOT NULL,
+      category_name VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES discount_campaigns(id) ON DELETE CASCADE,
+      UNIQUE KEY uniq_campaign_category (campaign_id, category_name),
+      INDEX idx_category (category_name)
+    )
+  `);
+  console.log('Discount campaign categories table ready');
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      type ENUM('wishlist_discount', 'system') NOT NULL DEFAULT 'wishlist_discount',
+      title VARCHAR(255) NOT NULL,
+      message TEXT,
+      campaign_id INT,
+      affected_products JSON,
+      read_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (campaign_id) REFERENCES discount_campaigns(id) ON DELETE SET NULL,
+      INDEX idx_user_unread (user_id, read_at),
+      INDEX idx_campaign (campaign_id),
+      INDEX idx_created (created_at),
+      UNIQUE KEY uniq_user_campaign_time (user_id, campaign_id, created_at)
+    ) ENGINE=InnoDB
+  `);
+  console.log('Notifications table ready');
+
   await db.end();
 }
 
