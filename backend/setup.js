@@ -189,6 +189,19 @@ async function setup() {
     await db.execute(`ALTER TABLE return_requests ADD COLUMN refunded_at TIMESTAMP NULL DEFAULT NULL`);
   } catch (e) { /* column already exists */ }
 
+  // Discount columns on order_items (added when discount feature shipped)
+  const orderItemsDiscountCols = [
+    `ALTER TABLE order_items ADD COLUMN discount_campaign_id INT DEFAULT NULL`,
+    `ALTER TABLE order_items ADD COLUMN discount_type VARCHAR(20) DEFAULT NULL`,
+    `ALTER TABLE order_items ADD COLUMN discount_value DECIMAL(10,2) DEFAULT NULL`,
+    `ALTER TABLE order_items ADD COLUMN discount_amount DECIMAL(12,2) DEFAULT NULL`,
+    `ALTER TABLE order_items ADD COLUMN original_price DECIMAL(12,2) DEFAULT NULL`,
+  ];
+  for (const sql of orderItemsDiscountCols) {
+    try { await db.execute(sql); } catch (e) { /* column already exists */ }
+  }
+  console.log('Order items discount columns ready');
+
   await db.end();
 }
 

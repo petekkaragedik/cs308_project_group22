@@ -103,11 +103,6 @@ export default function SalesManagerInvoicePage() {
   };
 
   const handlePrint = () => {
-    const dateRange = startDate || endDate
-      ? `Period: ${startDate || 'beginning'} → ${endDate || 'today'}`
-      : 'All time';
-
-  const handlePrint = () => {
     const dateRange = startDate || endDate ? `Period: ${startDate || 'beginning'} → ${endDate || 'today'}` : 'All time';
     const rows = invoices.map((inv) => `
       <tr>
@@ -222,8 +217,8 @@ const styles = {
   dateInput: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-3)', background: 'var(--color-white)', outline: 'none' },
   filterBtn: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', backgroundColor: 'var(--color-black)', color: 'var(--color-white)', border: 'none', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-5)', cursor: 'pointer', alignSelf: 'flex-end' },
   clearBtn: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', backgroundColor: 'transparent', color: 'var(--color-charcoal)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-4)', cursor: 'pointer', alignSelf: 'flex-end' },
-  summaryRow: { display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' },
-  summaryCard: { backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5) var(--space-7)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: '160px' },
+  summaryRow: { display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', flexWrap: 'wrap', maxWidth: '640px' },
+  summaryCard: { flex: '1 1 0', backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-md)', padding: 'var(--space-5) var(--space-6)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: '140px' },
   summaryLabel: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)', textTransform: 'uppercase', letterSpacing: '0.05em' },
   summaryValue: { fontFamily: 'var(--font-heading)', fontSize: 'var(--text-2xl)', color: 'var(--color-black)' },
   tableWrap: { backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)', overflowX: 'auto' },

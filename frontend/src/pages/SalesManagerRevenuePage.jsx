@@ -137,7 +137,7 @@ export default function SalesManagerRevenuePage() {
             {[
               { label: 'Total Orders', value: totals.orderCount, raw: true },
               { label: 'Gross Revenue', value: totals.revenue },
-              { label: 'Discount Loss', value: totals.discountLoss, negative: true },
+              { label: 'Discount Loss', value: totals.discountLoss, negative: totals.discountLoss > 0 },
               { label: 'Net Profit', value: totals.profit, highlight: true },
             ].map(({ label, value, raw, negative, highlight }) => (
               <div key={label} style={{ ...styles.summaryCard, ...(highlight ? styles.highlightCard : {}) }}>
@@ -220,8 +220,8 @@ const styles = {
   filterBtn: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', backgroundColor: 'var(--color-black)', color: 'var(--color-white)', border: 'none', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-5)', cursor: 'pointer', alignSelf: 'flex-end' },
   clearBtn: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', backgroundColor: 'transparent', color: 'var(--color-charcoal)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-2) var(--space-4)', cursor: 'pointer', alignSelf: 'flex-end' },
   summaryRow: { display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' },
-  summaryCard: { backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5) var(--space-7)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: '150px' },
-  highlightCard: { backgroundColor: 'var(--color-black)', border: '1px solid var(--color-black)' },
+  summaryCard: { flex: '1 1 0', backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-md)', padding: 'var(--space-5) var(--space-6)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: '130px' },
+  highlightCard: { backgroundColor: '#2d6a4f', border: '1px solid #2d6a4f' },
   summaryLabel: { fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)', textTransform: 'uppercase', letterSpacing: '0.05em' },
   summaryValue: { fontFamily: 'var(--font-heading)', fontSize: 'var(--text-2xl)', color: 'var(--color-black)' },
   chartCard: { backgroundColor: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-6)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' },
