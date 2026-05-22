@@ -215,6 +215,7 @@ export default function ProductListingPage() {
   const [selectedColors, setSelectedColors] = useState([]);
   const [availableColors, setAvailableColors] = useState([]);
   const hasLoadedColors = useRef(false);
+  const [discounts, setDiscounts] = useState({});
 
   // Fetch categories from backend on mount
   useEffect(() => {
@@ -269,6 +270,16 @@ export default function ProductListingPage() {
       })
       .catch(() => { setError(true); setLoading(false); });
   }, [activeCategory, sortBy, currentPage, pageSize, minPrice, maxPrice, minRating, inStockOnly, selectedColors]);
+
+  // Fetch active discounts for displayed products
+  useEffect(() => {
+    if (products.length === 0) return;
+    const productIds = products.map(p => p.id).join(',');
+    fetch(apiUrl(`/api/discounts/active?product_ids=${productIds}`))
+      .then((r) => r.json())
+      .then((data) => setDiscounts(data))
+      .catch(() => {});
+  }, [products]);
 
   useEffect(() => {
     function onScroll() {
@@ -619,6 +630,7 @@ export default function ProductListingPage() {
                     if (!token) { navigate('/login'); return; }
                     toggleWishlist(card.id);
                   }}
+                  discounts={discounts}
                 />
               ))}
             </div>
@@ -662,7 +674,7 @@ export default function ProductListingPage() {
 
 /* ─── Product Card ────────────────────────────────────── */
 
-function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap, wishlisted, onToggleWishlist }) {
+function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap, wishlisted, onToggleWishlist, discounts }) {
   const [hovered, setHovered] = useState(false);
   const [selectedSize, setSelectedSize] = useState(null);
   const [added, setAdded] = useState(false);
@@ -758,7 +770,23 @@ function ProductCard({ card, navigate, onAddToCart, sizeMap, sizeStockMap, wishl
         </p>
 
         <div style={styles.meta}>
-          <span style={styles.price}>{formatPrice(card.price)}</span>
+          {discounts?.[card.id] ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ ...styles.price, textDecoration: 'line-through', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xs)' }}>
+                  {formatPrice(card.price)}
+                </span>
+                <span style={{ fontSize: 'var(--text-xs)', backgroundColor: '#fef2f2', color: '#b91c1c', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontWeight: 'var(--weight-medium)' }}>
+                  -{Math.round((discounts[card.id].savings / card.price) * 100)}%
+                </span>
+              </div>
+              <span style={{ ...styles.price, color: '#b91c1c', marginBottom: 0 }}>
+                {formatPrice(discounts[card.id].discounted_price)}
+              </span>
+            </div>
+          ) : (
+            <span style={styles.price}>{formatPrice(card.price)}</span>
+          )}
           <span style={styles.colorLabel}>{card.color}</span>
         </div>
 

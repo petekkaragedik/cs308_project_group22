@@ -17,6 +17,8 @@ module.exports = function createNotificationRoutes(db, requireAuth) {
   const userId = req.user.id;
 
   try {
+    console.log('[Notifications API] Fetching for user:', userId, 'status:', status);
+
     let whereClause = 'WHERE user_id = ?';
     const params = [userId];
 
@@ -26,6 +28,7 @@ module.exports = function createNotificationRoutes(db, requireAuth) {
       whereClause += ' AND read_at IS NOT NULL';
     }
 
+    console.log('[Notifications API] Running query...');
     const [notifications] = await db.query(
       `SELECT
         n.*,
@@ -40,15 +43,25 @@ module.exports = function createNotificationRoutes(db, requireAuth) {
       [...params, parseInt(limit), parseInt(offset)]
     );
 
-    // Parse JSON affected_products field
-    const parsedNotifications = notifications.map(n => ({
-      ...n,
-      affected_products: n.affected_products ? JSON.parse(n.affected_products) : []
-    }));
+    console.log('[Notifications API] Query result count:', notifications.length);
+    console.log('[Notifications API] First notification:', notifications[0]);
 
+    // Parse JSON affected_products field (only if it's a string)
+    const parsedNotifications = notifications.map(n => {
+      console.log('[Notifications API] Processing notification:', n.id, 'affected_products type:', typeof n.affected_products);
+      return {
+        ...n,
+        affected_products: typeof n.affected_products === 'string'
+          ? JSON.parse(n.affected_products)
+          : (n.affected_products || [])
+      };
+    });
+
+    console.log('[Notifications API] Sending response with', parsedNotifications.length, 'notifications');
     res.json(parsedNotifications);
   } catch (error) {
-    console.error('Get notifications error:', error);
+    console.error('[Notifications API] ERROR:', error);
+    console.error('[Notifications API] Error stack:', error.stack);
     res.status(500).json({ message: 'Failed to fetch notifications' });
   }
 });

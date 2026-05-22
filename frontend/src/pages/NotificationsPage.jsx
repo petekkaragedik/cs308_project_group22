@@ -57,8 +57,8 @@ export default function NotificationsPage() {
     <>
       <style>{`
         .notif-btn:hover { opacity: 0.7; }
-        .notif-filter-btn:hover { background-color: var(--color-stone); }
-        .notif-item:hover { background-color: rgba(0, 0, 0, 0.02); }
+        .notif-filter-btn:hover { background-color: var(--color-blue); }
+        .notif-item:hover { background-color: var(--color-blue); }
       `}</style>
 
       <Navbar />
@@ -258,13 +258,13 @@ function Message({ text }) {
 const styles = {
   page: {
     minHeight: 'calc(100vh - var(--navbar-height) - var(--footer-height))',
-    padding: 'var(--spacing-xl) var(--spacing-md)',
+    padding: 'var(--space-8) var(--space-4)',
     maxWidth: 800,
     margin: '0 auto',
   },
   header: {
     textAlign: 'center',
-    marginBottom: 'var(--spacing-xl)',
+    marginBottom: 'var(--space-8)',
   },
   eyebrow: {
     fontSize: 'var(--text-sm)',
@@ -272,8 +272,8 @@ const styles = {
     fontWeight: 'var(--weight-medium)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
-    color: 'var(--color-stone-dark)',
-    marginBottom: 'var(--spacing-xs)',
+    color: 'var(--color-charcoal-light)',
+    marginBottom: 'var(--space-2)',
   },
   title: {
     fontSize: 'var(--text-3xl)',
@@ -286,20 +286,20 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 'var(--spacing-lg)',
+    marginBottom: 'var(--space-6)',
     flexWrap: 'wrap',
-    gap: 'var(--spacing-md)',
+    gap: 'var(--space-4)',
   },
   filters: {
     display: 'flex',
-    gap: 'var(--spacing-xs)',
+    gap: 'var(--space-2)',
   },
   filterBtn: {
-    padding: 'var(--spacing-xs) var(--spacing-md)',
+    padding: 'var(--space-2) var(--space-4)',
     fontSize: 'var(--text-sm)',
     fontFamily: 'var(--font-body)',
     fontWeight: 'var(--weight-medium)',
-    border: '1px solid var(--color-stone)',
+    border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'transparent',
     color: 'var(--color-charcoal)',
@@ -325,11 +325,11 @@ const styles = {
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--spacing-md)',
+    gap: 'var(--space-4)',
   },
   item: {
-    padding: 'var(--spacing-lg)',
-    border: '1px solid var(--color-stone)',
+    padding: 'var(--space-6)',
+    border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'var(--color-sand)',
     transition: 'background-color var(--transition-fast)',
@@ -341,7 +341,7 @@ const styles = {
   itemContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--spacing-sm)',
+    gap: 'var(--space-3)',
   },
   itemHeader: {
     display: 'flex',
@@ -354,7 +354,7 @@ const styles = {
     color: 'var(--color-charcoal)',
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--spacing-xs)',
+    gap: 'var(--space-2)',
   },
   unreadDot: {
     width: 8,
@@ -365,16 +365,16 @@ const styles = {
   deleteBtn: {
     backgroundColor: 'transparent',
     border: 'none',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     cursor: 'pointer',
-    padding: 'var(--spacing-xs)',
+    padding: 'var(--space-2)',
     display: 'flex',
     alignItems: 'center',
     transition: 'opacity var(--transition-fast)',
   },
   itemMessage: {
     fontSize: 'var(--text-sm)',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     margin: 0,
   },
   viewLink: {
@@ -387,11 +387,11 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 'var(--spacing-xs)',
+    marginTop: 'var(--space-2)',
   },
   itemTime: {
     fontSize: 'var(--text-xs)',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     margin: 0,
   },
   markReadBtn: {
@@ -407,31 +407,34 @@ const styles = {
   },
   emptyFiltered: {
     textAlign: 'center',
-    padding: 'var(--spacing-xl)',
-    color: 'var(--color-stone-dark)',
+    padding: 'var(--space-8)',
+    color: 'var(--color-charcoal-light)',
+    backgroundColor: 'var(--color-blue)',
+    borderRadius: 'var(--radius-md)',
+    margin: 'var(--space-4) 0',
   },
   message: {
     textAlign: 'center',
-    padding: 'var(--spacing-xl)',
-    color: 'var(--color-stone-dark)',
+    padding: 'var(--space-8)',
+    color: 'var(--color-charcoal-light)',
   },
   empty: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: 'var(--spacing-2xl) var(--spacing-md)',
+    padding: 'var(--space-12) var(--space-4)',
     textAlign: 'center',
   },
   emptyIconWrap: {
     position: 'relative',
-    marginBottom: 'var(--spacing-lg)',
+    marginBottom: 'var(--space-6)',
   },
   emptyIconHalo: {
     position: 'absolute',
     inset: -16,
     borderRadius: 'var(--radius-full)',
-    backgroundColor: 'var(--color-stone)',
-    opacity: 0.3,
+    backgroundColor: 'var(--color-blue)',
+    opacity: 0.5,
   },
   emptyIcon: {
     position: 'relative',
@@ -442,24 +445,24 @@ const styles = {
     fontFamily: 'var(--font-heading)',
     fontWeight: 'var(--weight-normal)',
     color: 'var(--color-charcoal)',
-    marginBottom: 'var(--spacing-sm)',
+    marginBottom: 'var(--space-3)',
   },
   emptyBody: {
     fontSize: 'var(--text-md)',
     fontFamily: 'var(--font-body)',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     maxWidth: 480,
-    marginBottom: 'var(--spacing-lg)',
+    marginBottom: 'var(--space-6)',
     lineHeight: 1.6,
   },
   emptyActions: {
     display: 'flex',
-    gap: 'var(--spacing-md)',
+    gap: 'var(--space-4)',
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
   button: {
-    padding: 'var(--spacing-sm) var(--spacing-lg)',
+    padding: 'var(--space-3) var(--space-6)',
     fontSize: 'var(--text-sm)',
     fontFamily: 'var(--font-body)',
     fontWeight: 'var(--weight-semibold)',
@@ -472,7 +475,7 @@ const styles = {
     transition: 'background-color var(--transition-fast)',
   },
   linkBtn: {
-    padding: 'var(--spacing-sm) var(--spacing-md)',
+    padding: 'var(--space-3) var(--space-4)',
     fontSize: 'var(--text-sm)',
     fontFamily: 'var(--font-body)',
     fontWeight: 'var(--weight-medium)',

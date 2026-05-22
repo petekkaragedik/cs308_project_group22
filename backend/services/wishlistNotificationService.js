@@ -10,6 +10,7 @@ function createWishlistNotificationService(db) {
    * @returns {Promise<number>} - Number of notifications created
    */
   async function detectWishlistDiscounts(campaignId) {
+    console.log(`🔔 detectWishlistDiscounts called for campaign ${campaignId}`);
     let conn;
     try {
       conn = await db.getConnection();
@@ -19,6 +20,7 @@ function createWishlistNotificationService(db) {
       'SELECT * FROM discount_campaigns WHERE id = ?',
       [campaignId]
     );
+    console.log(`📦 Campaign found:`, campaigns[0]?.name);
 
     if (campaigns.length === 0) {
       console.log(`Campaign ${campaignId} not found`);
@@ -28,13 +30,9 @@ function createWishlistNotificationService(db) {
     const campaign = campaigns[0];
 
     // Step 2: Check if notification is needed
-    const now = new Date();
-    const startDate = new Date(campaign.start_date);
-    const endDate = new Date(campaign.end_date);
-
-    // Only notify for active campaigns within date range
-    if (campaign.is_active !== 1 || now < startDate || now > endDate) {
-      console.log(`Campaign ${campaignId} is not currently active - skipping notifications`);
+    // Only notify for active campaigns (removed date range check for simplicity)
+    if (campaign.is_active !== 1) {
+      console.log(`Campaign ${campaignId} is not active - skipping notifications`);
       return 0;
     }
 
@@ -110,7 +108,7 @@ function createWishlistNotificationService(db) {
         title,
         message,
         campaignId,
-        uw.wishlisted_product_ids,
+        JSON.stringify(typeof uw.wishlisted_product_ids === 'string' ? JSON.parse(uw.wishlisted_product_ids) : uw.wishlisted_product_ids),
         null // read_at
       ];
     });

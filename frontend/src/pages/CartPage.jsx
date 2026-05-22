@@ -13,6 +13,7 @@ function formatPrice(price) {
 export default function CartPage() {
   const { cartItems, removeItem, updateItem } = useCart();
   const [products, setProducts] = useState([]);
+  const [discounts, setDiscounts] = useState({});
 
   useEffect(() => {
     fetch(apiUrl('/api/products?limit=500'))
@@ -21,12 +22,27 @@ export default function CartPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (cartItems.length === 0) return;
+    const productIds = cartItems.map(item => item.product_id).join(',');
+    fetch(apiUrl(`/api/discounts/active?product_ids=${productIds}`))
+      .then((r) => r.json())
+      .then((data) => setDiscounts(data))
+      .catch(() => {});
+  }, [cartItems]);
+
   // eslint-disable-next-line eqeqeq
   function getProduct(id) { return products.find((p) => p.id == id) ?? null; }
 
+  function getPrice(productId) {
+    const discount = discounts[productId];
+    const product = getProduct(productId);
+    if (!product) return 0;
+    return discount ? discount.discounted_price : product.price;
+  }
+
   const total = cartItems.reduce((sum, item) => {
-    const p = getProduct(item.product_id);
-    return sum + (p ? p.price * item.quantity : 0);
+    return sum + (getPrice(item.product_id) * item.quantity);
   }, 0);
 
   return (
@@ -60,7 +76,21 @@ export default function CartPage() {
                         <p style={styles.name}>{product.name}</p>
                       </Link>
                       <p style={styles.meta}>{product.color} · Size {item.size}</p>
-                      <p style={styles.price}>{formatPrice(product.price)}</p>
+                      {discounts[product.id] ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                          <p style={{ ...styles.price, textDecoration: 'line-through', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-xs)' }}>
+                            {formatPrice(product.price)}
+                          </p>
+                          <p style={{ ...styles.price, color: '#b91c1c', marginBottom: 0 }}>
+                            {formatPrice(discounts[product.id].discounted_price)}
+                          </p>
+                          <span style={{ fontSize: 'var(--text-xs)', backgroundColor: '#fef2f2', color: '#b91c1c', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontWeight: 'var(--weight-medium)' }}>
+                            -{Math.round((discounts[product.id].savings / product.price) * 100)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <p style={styles.price}>{formatPrice(product.price)}</p>
+                      )}
                       {item.quantity >= product.quantityInStock && (
                         <p style={styles.stockWarning}>Max stock reached</p>
                       )}

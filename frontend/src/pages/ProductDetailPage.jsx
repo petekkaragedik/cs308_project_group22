@@ -162,12 +162,14 @@ export default function ProductDetailPage() {
   const [modelProducts, setModelProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null); // null | 'not_found' | 'error'
+  const [discount, setDiscount] = useState(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     setProduct(null);
     setModelProducts([]);
+    setDiscount(null);
 
     fetch(apiUrl(`/api/products/${id}`))
       .then((res) => {
@@ -184,6 +186,15 @@ export default function ProductDetailPage() {
         setError(err.code === 'not_found' ? 'not_found' : 'error');
         setLoading(false);
       });
+  }, [id]);
+
+  // Fetch discount for this product
+  useEffect(() => {
+    if (!id) return;
+    fetch(apiUrl(`/api/discounts/active?product_ids=${id}`))
+      .then((r) => r.json())
+      .then((data) => setDiscount(data[id] || null))
+      .catch(() => {});
   }, [id]);
 
   /* One representative id per color (first entry found) */
@@ -537,7 +548,23 @@ export default function ProductDetailPage() {
             <h1 style={styles.productName}>{fixEncoding(product.name)}</h1>
 
             {/* Price */}
-            <p style={styles.price}>{formatPrice(product.price)}</p>
+            {discount ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <p style={{ ...styles.price, textDecoration: 'line-through', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-lg)' }}>
+                    {formatPrice(product.price)}
+                  </p>
+                  <span style={{ fontSize: 'var(--text-sm)', backgroundColor: '#b91c1c', color: 'white', padding: '4px 12px', borderRadius: 'var(--radius-md)', fontWeight: 'var(--weight-bold)' }}>
+                    -{Math.round((discount.savings / product.price) * 100)}% OFF
+                  </span>
+                </div>
+                <p style={{ ...styles.price, color: '#b91c1c', fontSize: 'var(--text-3xl)', marginBottom: 0 }}>
+                  {formatPrice(discount.discounted_price)}
+                </p>
+              </div>
+            ) : (
+              <p style={styles.price}>{formatPrice(product.price)}</p>
+            )}
 
             {/* Color selector */}
             {colorVariants.length > 0 && (

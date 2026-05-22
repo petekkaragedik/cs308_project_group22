@@ -81,6 +81,26 @@ export default function SalesManagerDiscountPage() {
     }
   }
 
+  async function handleToggleActive(campaignId, currentlyActive) {
+    try {
+      const res = await fetch(apiUrl(`/api/discounts/campaigns/${campaignId}`), {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !currentlyActive })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Failed to update campaign');
+      }
+
+      fetchCampaigns();
+    } catch (err) {
+      console.error('Toggle campaign error:', err);
+      alert(err.message);
+    }
+  }
+
   async function handleDelete(campaignId) {
     try {
       const res = await fetch(apiUrl(`/api/discounts/campaigns/${campaignId}`), {
@@ -126,6 +146,8 @@ export default function SalesManagerDiscountPage() {
         return { ...base, backgroundColor: 'var(--color-blue)', color: 'var(--color-black)' };
       case 'expired':
         return { ...base, backgroundColor: 'var(--color-border)', color: 'var(--color-charcoal)' };
+      case 'deleted':
+        return { ...base, backgroundColor: '#fee', color: '#c00' };
       case 'inactive':
         return { ...base, backgroundColor: 'var(--color-error)', color: 'var(--color-white)' };
       default:
@@ -171,7 +193,7 @@ export default function SalesManagerDiscountPage() {
         </button>
 
         <div style={styles.tabs}>
-          {['active', 'upcoming', 'expired', 'all'].map(tab => (
+          {['active', 'upcoming', 'expired', 'deleted'].map(tab => (
             <button
               key={tab}
               style={activeTab === tab ? styles.tabActive : styles.tab}
@@ -206,17 +228,19 @@ export default function SalesManagerDiscountPage() {
                       {campaign.status}
                     </span>
                   </div>
-                  <div style={styles.cardActions}>
-                    <button style={styles.editBtn} onClick={() => openEditModal(campaign)}>
-                      Edit
-                    </button>
-                    <button
-                      style={styles.deleteBtn}
-                      onClick={() => setDeleteConfirm(campaign.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  {campaign.status !== 'deleted' && (
+                    <div style={styles.cardActions}>
+                      <button style={styles.editBtn} onClick={() => openEditModal(campaign)}>
+                        Edit
+                      </button>
+                      <button
+                        style={styles.deleteBtn}
+                        onClick={() => setDeleteConfirm(campaign.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {campaign.description && (
@@ -417,6 +441,16 @@ const styles = {
   cardActions: {
     display: 'flex',
     gap: 'var(--space-2)',
+  },
+  toggleBtn: {
+    padding: 'var(--space-2) var(--space-4)',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    border: '1px solid var(--color-blue)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--color-white)',
+    color: 'var(--color-blue)',
+    cursor: 'pointer',
   },
   editBtn: {
     padding: 'var(--space-2) var(--space-4)',

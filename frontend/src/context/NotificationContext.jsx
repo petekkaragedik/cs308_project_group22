@@ -8,6 +8,7 @@ export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Check if user is authenticated
   const getToken = useCallback(() => {
@@ -24,19 +25,39 @@ export function NotificationProvider({ children }) {
 
     try {
       setLoading(true);
+      setError(null);
       const token = getToken();
-      const response = await fetch(`${API_BASE}/api/notifications?status=${status}&limit=50`, {
+      const url = `${API_BASE}/api/notifications?status=${status}&limit=50`;
+
+      console.log('[NotificationContext] Fetching notifications:', { url, status });
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log('[NotificationContext] Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('[NotificationContext] Fetched notifications:', {
+          count: data.length,
+          data: data
+        });
         setNotifications(data);
+      } else {
+        const errorText = await response.text();
+        console.error('[NotificationContext] API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        setError('Failed to load notifications');
       }
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      console.error('[NotificationContext] Fetch error:', error);
+      setError('Failed to load notifications');
     } finally {
       setLoading(false);
     }
@@ -167,6 +188,7 @@ export function NotificationProvider({ children }) {
         notifications,
         unreadCount,
         loading,
+        error,
         fetchNotifications,
         fetchUnreadCount,
         markAsRead,

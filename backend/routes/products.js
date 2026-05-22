@@ -29,7 +29,7 @@ module.exports = function createProductRoutes(db, requireAuth, requireRole) {
     }
 });
 
-  router.post('/bulk-price-update', requireRole('sales_manager'), async (req, res) => {
+  router.post('/bulk-price-update', requireAuth, requireRole('sales_manager'), async (req, res) => {
     const { updates } = req.body;
 
     // Validation

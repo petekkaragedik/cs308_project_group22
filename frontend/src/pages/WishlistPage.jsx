@@ -19,6 +19,7 @@ export default function WishlistPage() {
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [discounts, setDiscounts] = useState({});
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
@@ -45,6 +46,15 @@ export default function WishlistPage() {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (favorites.length === 0) return;
+    const productIds = favorites.map(f => f.id).join(',');
+    fetch(`/api/discounts/active?product_ids=${productIds}`)
+      .then((r) => r.json())
+      .then((data) => setDiscounts(data))
+      .catch(() => {});
+  }, [favorites]);
 
   async function handleRemove(productId) {
     setFavorites((prev) => prev.filter((p) => String(p.id) !== String(productId)));
@@ -109,6 +119,7 @@ export default function WishlistPage() {
                   product={p}
                   onClick={() => navigate(`/products/${p.id}`)}
                   onRemove={() => handleRemove(p.id)}
+                  discount={discounts[p.id]}
                 />
               ))}
             </div>
@@ -123,7 +134,7 @@ export default function WishlistPage() {
 
 /* ─── Card ────────────────────────────────────────────── */
 
-function WishlistCard({ product, onClick, onRemove }) {
+function WishlistCard({ product, onClick, onRemove, discount }) {
   const inStock = product.quantityInStock > 0;
   const image = Array.isArray(product.images) && product.images.length > 0
     ? product.images[0]
@@ -145,6 +156,11 @@ function WishlistCard({ product, onClick, onRemove }) {
         <span style={{ ...styles.badge, ...(inStock ? styles.badgeIn : styles.badgeOut) }}>
           {inStock ? 'IN STOCK' : 'OUT OF STOCK'}
         </span>
+        {discount && (
+          <span style={{ position: 'absolute', top: '8px', right: '8px', backgroundColor: '#b91c1c', color: 'white', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)' }}>
+            -{Math.round((discount.savings / product.price) * 100)}% OFF
+          </span>
+        )}
         <button
           className="wl-remove-btn"
           style={styles.removeBtn}
@@ -159,7 +175,18 @@ function WishlistCard({ product, onClick, onRemove }) {
       <div style={styles.body}>
         <p style={styles.category}>{product.categoryName}</p>
         <p style={styles.name} onClick={onClick}>{product.name}</p>
-        <p style={styles.price}>{formatPrice(product.price)}</p>
+        {discount ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+            <p style={{ ...styles.price, textDecoration: 'line-through', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-sm)' }}>
+              {formatPrice(product.price)}
+            </p>
+            <p style={{ ...styles.price, color: '#b91c1c' }}>
+              {formatPrice(discount.discounted_price)}
+            </p>
+          </div>
+        ) : (
+          <p style={styles.price}>{formatPrice(product.price)}</p>
+        )}
         <button
           className="wl-btn"
           style={styles.viewBtn}

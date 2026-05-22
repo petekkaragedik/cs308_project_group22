@@ -69,9 +69,9 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
 
   async function fetchProducts() {
     try {
-      const res = await fetch(apiUrl('/api/products'));
+      const res = await fetch(apiUrl('/api/products?limit=1000'));
       const data = await res.json();
-      setProducts(data);
+      setProducts(data.data ?? data);
     } catch (err) {
       console.error('Failed to fetch products:', err);
     }
@@ -79,9 +79,10 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
 
   async function fetchCategories() {
     try {
-      const res = await fetch(apiUrl('/api/products'));
+      const res = await fetch(apiUrl('/api/products?limit=1000'));
       const data = await res.json();
-      const uniqueCategories = [...new Set(data.map(p => p.categoryName))].filter(Boolean);
+      const products = data.data ?? data;
+      const uniqueCategories = [...new Set(products.map(p => p.categoryName))].filter(Boolean);
       setCategories(uniqueCategories);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -118,6 +119,11 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
     return null;
   }
 
+  function toMySQLDateTime(dateString) {
+    const date = new Date(dateString);
+    return date.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -135,12 +141,17 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
       description: description.trim() || null,
       discount_type: discountType,
       discount_value: Number(discountValue),
-      start_date: new Date(startDate).toISOString(),
-      end_date: new Date(endDate).toISOString(),
+      end_date: toMySQLDateTime(endDate),
       is_active: true,
       product_ids: selectedProducts.length > 0 ? selectedProducts : undefined,
       category_names: selectedCategories.length > 0 ? selectedCategories : undefined
     };
+
+    // Only include start_date if creating new campaign or campaign hasn't started yet
+    const campaignStarted = editCampaign && new Date(editCampaign.start_date) < new Date();
+    if (!campaignStarted) {
+      payload.start_date = toMySQLDateTime(startDate);
+    }
 
     try {
       const url = editCampaign
@@ -156,7 +167,9 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.message || 'Failed to save campaign');
+        console.error('Campaign creation failed:', res.status, data);
+        const errorMsg = data.error ? `${data.message}: ${data.error}` : data.message;
+        throw new Error(errorMsg || 'Failed to save campaign');
       }
 
       onSuccess();
@@ -245,12 +258,23 @@ export default function CampaignModal({ isOpen, onClose, onSuccess, editCampaign
 
           <div style={styles.formRow}>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Start Date *</label>
+              <label style={styles.label}>
+                Start Date *
+                {editCampaign && new Date(editCampaign.start_date) < new Date() && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)', marginLeft: 'var(--space-2)' }}>
+                    (cannot be changed)
+                  </span>
+                )}
+              </label>
               <input
                 type="datetime-local"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                style={styles.input}
+                style={{
+                  ...styles.input,
+                  ...(editCampaign && new Date(editCampaign.start_date) < new Date() ? { backgroundColor: 'var(--color-sand)', cursor: 'not-allowed' } : {})
+                }}
+                disabled={editCampaign && new Date(editCampaign.start_date) < new Date()}
                 required
               />
             </div>

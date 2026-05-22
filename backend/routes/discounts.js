@@ -104,8 +104,9 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
       );
 
       // Trigger wishlist notifications asynchronously (don't block response)
+      console.log(`🚀 Triggering wishlist notifications for campaign ${campaignId}`);
       detectWishlistDiscounts(campaignId).catch(err => {
-        console.error('Failed to create wishlist notifications:', err);
+        console.error('❌ Failed to create wishlist notifications:', err);
       });
 
       res.status(201).json({
@@ -115,7 +116,9 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
     } catch (error) {
       if (conn) await conn.rollback();
       console.error('Create campaign error:', error);
-      res.status(500).json({ message: 'Failed to create campaign' });
+      console.error('Error details:', error.message);
+      console.error('SQL Error Code:', error.code);
+      res.status(500).json({ message: 'Failed to create campaign', error: error.message });
     } finally {
       if (conn) conn.release();
     }
@@ -131,7 +134,11 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
 
     try {
       let statusCondition = '';
-      if (status === 'active') {
+      let deletedCondition = 'AND dc.deleted_at IS NULL';
+
+      if (status === 'deleted') {
+        deletedCondition = 'AND dc.deleted_at IS NOT NULL';
+      } else if (status === 'active') {
         statusCondition = 'AND dc.is_active = 1 AND NOW() BETWEEN dc.start_date AND dc.end_date';
       } else if (status === 'upcoming') {
         statusCondition = 'AND dc.is_active = 1 AND NOW() < dc.start_date';
@@ -146,6 +153,7 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
           COUNT(DISTINCT dcc.category_name) as category_count,
           GROUP_CONCAT(DISTINCT dcc.category_name SEPARATOR ', ') as categories,
           CASE
+            WHEN dc.deleted_at IS NOT NULL THEN 'deleted'
             WHEN dc.is_active = 0 THEN 'inactive'
             WHEN NOW() < dc.start_date THEN 'upcoming'
             WHEN NOW() > dc.end_date THEN 'expired'
@@ -154,7 +162,7 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
         FROM discount_campaigns dc
         LEFT JOIN discount_campaign_products dcp ON dc.id = dcp.campaign_id
         LEFT JOIN discount_campaign_categories dcc ON dc.id = dcc.campaign_id
-        WHERE 1=1 ${statusCondition}
+        WHERE 1=1 ${deletedCondition} ${statusCondition}
         GROUP BY dc.id
         ORDER BY dc.created_at DESC
       `);
@@ -346,28 +354,14 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
     const { id } = req.params;
 
     try {
-      const [campaigns] = await db.query(`
-        SELECT *,
-          CASE
-            WHEN is_active = 0 THEN 'inactive'
-            WHEN NOW() < start_date THEN 'upcoming'
-            WHEN NOW() > end_date THEN 'expired'
-            ELSE 'active'
-          END as status
-        FROM discount_campaigns WHERE id = ?
-      `, [id]);
+      const [campaigns] = await db.query('SELECT * FROM discount_campaigns WHERE id = ? AND deleted_at IS NULL', [id]);
 
       if (campaigns.length === 0) {
         return res.status(404).json({ message: 'Campaign not found' });
       }
 
-      const campaign = campaigns[0];
-
-      if (campaign.status === 'active') {
-        return res.status(400).json({ message: 'Cannot delete active campaign. Please deactivate it first.' });
-      }
-
-      await db.query('DELETE FROM discount_campaigns WHERE id = ?', [id]);
+      // Soft delete: set deleted_at timestamp
+      await db.query('UPDATE discount_campaigns SET deleted_at = NOW() WHERE id = ?', [id]);
 
       res.json({ message: 'Campaign deleted successfully' });
     } catch (error) {
@@ -406,6 +400,7 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
         FROM discount_campaigns dc
         JOIN discount_campaign_products dcp ON dc.id = dcp.campaign_id
         WHERE dc.is_active = 1
+          AND dc.deleted_at IS NULL
           AND NOW() BETWEEN dc.start_date AND dc.end_date
           AND dcp.product_id IN (?)
       `, [productIdArray]);
@@ -422,6 +417,7 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
         JOIN discount_campaign_categories dcc ON dc.id = dcc.campaign_id
         JOIN products p ON p.categoryName = dcc.category_name
         WHERE dc.is_active = 1
+          AND dc.deleted_at IS NULL
           AND NOW() BETWEEN dc.start_date AND dc.end_date
           AND p.id IN (?)
       `, [productIdArray]);

@@ -6,7 +6,7 @@ import { useNotifications } from '../context/NotificationContext';
 export default function NotificationBell() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
-  const { notifications, unreadCount, fetchNotifications, markAsRead } = useNotifications();
+  const { notifications, unreadCount, error, fetchNotifications, markAsRead } = useNotifications();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -45,6 +45,15 @@ export default function NotificationBell() {
 
   return (
     <div style={styles.container} ref={dropdownRef}>
+      <style>{`
+        .notification-item-link:hover {
+          background-color: var(--color-blue-hover) !important;
+        }
+        .notification-view-all:hover {
+          background-color: var(--color-blue) !important;
+        }
+      `}</style>
+
       <button
         style={styles.iconBtn}
         aria-label="Notifications"
@@ -63,11 +72,21 @@ export default function NotificationBell() {
           <div style={styles.dropdownHeader}>
             <h3 style={styles.dropdownTitle}>Notifications</h3>
             {unreadCount > 0 && (
-              <span style={styles.unreadText}>{unreadCount} unread</span>
+              <span style={styles.unreadText}>{unreadCount}</span>
             )}
           </div>
 
-          {recentNotifications.length === 0 ? (
+          {error ? (
+            <div style={styles.errorState}>
+              <p style={styles.errorText}>{error}</p>
+              <button
+                style={styles.retryBtn}
+                onClick={() => fetchNotifications('all')}
+              >
+                Retry
+              </button>
+            </div>
+          ) : recentNotifications.length === 0 ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>No notifications yet</p>
             </div>
@@ -77,6 +96,7 @@ export default function NotificationBell() {
                 <Link
                   key={notification.id}
                   to="/notifications"
+                  className="notification-item-link"
                   style={{
                     ...styles.notificationItem,
                     ...(notification.read_at ? {} : styles.notificationItemUnread)
@@ -98,6 +118,7 @@ export default function NotificationBell() {
 
           <Link
             to="/notifications"
+            className="notification-view-all"
             style={styles.viewAllLink}
             onClick={() => setDropdownOpen(false)}
           >
@@ -134,7 +155,7 @@ const styles = {
     border: 'none',
     color: 'var(--color-charcoal)',
     cursor: 'pointer',
-    padding: 'var(--spacing-xs)',
+    padding: 'var(--space-2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -164,16 +185,18 @@ const styles = {
     width: 360,
     maxHeight: 480,
     backgroundColor: 'var(--color-sand)',
-    border: '1px solid var(--color-stone)',
+    border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    boxShadow: 'var(--shadow-lg)',
     zIndex: 1000,
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   dropdownHeader: {
-    padding: 'var(--spacing-md)',
-    borderBottom: '1px solid var(--color-stone)',
+    padding: 'var(--space-5)',
+    borderBottom: '1px solid var(--color-border)',
+    backgroundColor: 'var(--color-blue)',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -185,15 +208,22 @@ const styles = {
     margin: 0,
   },
   unreadText: {
-    fontSize: 'var(--text-sm)',
-    color: 'var(--color-stone-dark)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-white)',
+    padding: '2px var(--space-2)',
+    borderRadius: 'var(--radius-full)',
   },
   emptyState: {
-    padding: 'var(--spacing-xl)',
+    padding: 'var(--space-8)',
     textAlign: 'center',
+    backgroundColor: 'var(--color-blue)',
+    margin: 'var(--space-4)',
+    borderRadius: 'var(--radius-md)',
   },
   emptyText: {
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     fontSize: 'var(--text-sm)',
   },
   notificationList: {
@@ -201,18 +231,18 @@ const styles = {
     maxHeight: 360,
   },
   notificationItem: {
-    padding: 'var(--spacing-md)',
-    borderBottom: '1px solid var(--color-stone)',
+    padding: 'var(--space-4)',
+    borderBottom: '1px solid var(--color-border)',
     display: 'flex',
     alignItems: 'flex-start',
-    gap: 'var(--spacing-sm)',
+    gap: 'var(--space-3)',
     textDecoration: 'none',
     color: 'inherit',
     transition: 'background-color var(--transition-fast)',
     cursor: 'pointer',
   },
   notificationItemUnread: {
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    backgroundColor: 'var(--color-blue)',
   },
   notificationContent: {
     flex: 1,
@@ -225,12 +255,12 @@ const styles = {
   },
   notificationMessage: {
     fontSize: 'var(--text-sm)',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     margin: '0 0 4px 0',
   },
   notificationTime: {
     fontSize: 'var(--text-xs)',
-    color: 'var(--color-stone-dark)',
+    color: 'var(--color-charcoal-light)',
     margin: 0,
   },
   unreadDot: {
@@ -242,13 +272,44 @@ const styles = {
     marginTop: 6,
   },
   viewAllLink: {
-    padding: 'var(--spacing-md)',
-    borderTop: '1px solid var(--color-stone)',
+    padding: 'var(--space-4)',
+    borderTop: '1px solid var(--color-border)',
     textAlign: 'center',
     fontSize: 'var(--text-sm)',
     fontWeight: 'var(--weight-semibold)',
     color: 'var(--color-charcoal)',
     textDecoration: 'none',
     transition: 'background-color var(--transition-fast)',
+    backgroundColor: 'var(--color-sand)',
+    display: 'block',
+  },
+  errorState: {
+    padding: 'var(--space-8)',
+    textAlign: 'center',
+    backgroundColor: 'var(--color-error)',
+    margin: 'var(--space-4)',
+    borderRadius: 'var(--radius-md)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-3)',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#991b1b',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-medium)',
+    margin: 0,
+  },
+  retryBtn: {
+    padding: 'var(--space-2) var(--space-4)',
+    fontSize: 'var(--text-sm)',
+    fontFamily: 'var(--font-body)',
+    fontWeight: 'var(--weight-semibold)',
+    backgroundColor: 'var(--color-charcoal)',
+    color: 'var(--color-white)',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+    transition: 'opacity var(--transition-fast)',
   },
 };

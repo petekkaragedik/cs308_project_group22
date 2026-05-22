@@ -42,6 +42,7 @@ export default function LandingPage() {
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [discounts, setDiscounts] = useState({});
   const featuredRef = useRef(null);
 
   useEffect(() => {
@@ -53,6 +54,15 @@ export default function LandingPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (featured.length === 0) return;
+    const productIds = featured.map(p => p.id).join(',');
+    fetch(`/api/discounts/active?product_ids=${productIds}`)
+      .then((r) => r.json())
+      .then((data) => setDiscounts(data))
+      .catch(() => {});
+  }, [featured]);
 
   useEffect(() => {
     function onScroll() { setShowScrollTop(window.scrollY > 300); }
@@ -149,7 +159,7 @@ export default function LandingPage() {
         ) : (
           <div style={styles.featuredGrid} className="lp-featured-grid">
             {featured.map((p) => (
-              <FeaturedCard key={p.id} product={p} onClick={() => navigate(`/products/${p.id}`)} />
+              <FeaturedCard key={p.id} product={p} onClick={() => navigate(`/products/${p.id}`)} discount={discounts[p.id]} />
             ))}
           </div>
         )}
@@ -220,7 +230,7 @@ export default function LandingPage() {
 
 /* ─── Featured Card ───────────────────────────────────── */
 
-function FeaturedCard({ product, onClick }) {
+function FeaturedCard({ product, onClick, discount }) {
   const inStock = product.quantityInStock > 0;
   return (
     <div className="lp-card" onClick={onClick} style={styles.card}>
@@ -236,11 +246,27 @@ function FeaturedCard({ product, onClick }) {
         {!inStock && (
           <span style={styles.outBadge}>OUT OF STOCK</span>
         )}
+        {discount && (
+          <span style={{ position: 'absolute', top: 8, right: 8, fontSize: 'var(--text-xs)', backgroundColor: '#b91c1c', color: 'white', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontWeight: 'var(--weight-semibold)' }}>
+            -{Math.round((discount.savings / product.price) * 100)}% OFF
+          </span>
+        )}
       </div>
       <div style={styles.cardBody}>
         <p style={styles.cardCategory}>{product.categoryName}</p>
         <p style={styles.cardName}>{product.name}</p>
-        <p style={styles.cardPrice}>{formatPrice(product.price)}</p>
+        {discount ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <p style={{ ...styles.cardPrice, textDecoration: 'line-through', color: 'var(--color-charcoal-light)', fontSize: 'var(--text-sm)' }}>
+              {formatPrice(product.price)}
+            </p>
+            <p style={{ ...styles.cardPrice, color: '#b91c1c' }}>
+              {formatPrice(discount.discounted_price)}
+            </p>
+          </div>
+        ) : (
+          <p style={styles.cardPrice}>{formatPrice(product.price)}</p>
+        )}
       </div>
     </div>
   );
