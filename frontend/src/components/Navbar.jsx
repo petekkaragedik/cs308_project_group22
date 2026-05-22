@@ -21,9 +21,9 @@ export default function Navbar() {
   const [allProducts, setAllProducts] = useState([]);
 
   useEffect(() => {
-    fetch(apiUrl('/api/products'))
+    fetch(apiUrl('/api/products?limit=500'))
       .then((res) => res.json())
-      .then((data) => setAllProducts(data))
+      .then((data) => setAllProducts(Array.isArray(data) ? data : (data.data ?? [])))
       .catch(() => {});
   }, []);
 

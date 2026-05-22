@@ -38,9 +38,9 @@ export default function CheckoutPage() {
   }, [navigate]);
 
   useEffect(() => {
-    fetch(apiUrl('/api/products'))
+    fetch(apiUrl('/api/products?limit=500'))
       .then((r) => r.json())
-      .then((data) => setProducts(Array.isArray(data) ? data : []))
+      .then((data) => setProducts(Array.isArray(data) ? data : (data.data ?? [])))
       .catch(() => {});
   }, []);
 

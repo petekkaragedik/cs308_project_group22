@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { apiUrl } from '../apiBase';
 
 function formatPrice(price) {
   return '₺' + price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -14,9 +15,9 @@ export default function CartPage() {
   const [products, setProducts] = useState([]);
 
   useEffect(() => {
-    fetch('/api/products')
+    fetch(apiUrl('/api/products?limit=500'))
       .then((r) => r.json())
-      .then((data) => setProducts(Array.isArray(data) ? data : []))
+      .then((data) => setProducts(Array.isArray(data) ? data : (data.data ?? [])))
       .catch(() => {});
   }, []);
 
