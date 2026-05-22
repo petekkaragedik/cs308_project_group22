@@ -103,6 +103,11 @@ export default function SalesManagerInvoicePage() {
   };
 
   const handlePrint = () => {
+    const dateRange = startDate || endDate
+      ? `Period: ${startDate || 'beginning'} → ${endDate || 'today'}`
+      : 'All time';
+
+  const handlePrint = () => {
     const dateRange = startDate || endDate ? `Period: ${startDate || 'beginning'} → ${endDate || 'today'}` : 'All time';
     const rows = invoices.map((inv) => `
       <tr>
@@ -203,7 +208,6 @@ export default function SalesManagerInvoicePage() {
     </>
   );
 }
-
 
 const styles = {
   page: { minHeight: '70vh', backgroundColor: 'var(--color-sand)', padding: 'var(--space-10) var(--container-pad)', maxWidth: '1200px', margin: '0 auto' },

@@ -110,7 +110,6 @@ export default function SalesManagerRevenuePage() {
           )}
         </div>
 
-        {/* Filter bar */}
         <div style={styles.filterBar}>
           <div style={styles.filterGroup}>
             <label style={styles.label}>From</label>
@@ -133,7 +132,6 @@ export default function SalesManagerRevenuePage() {
           )}
         </div>
 
-        {/* Summary cards */}
         {totals && !error && (
           <div style={styles.summaryRow}>
             {[
@@ -154,7 +152,6 @@ export default function SalesManagerRevenuePage() {
 
         {error && <p style={styles.errorMsg}>{error}</p>}
 
-        {/* Chart */}
         {!error && (
           <div style={styles.chartCard}>
             {loading ? (
@@ -177,7 +174,6 @@ export default function SalesManagerRevenuePage() {
                   </ComposedChart>
                 </ResponsiveContainer>
 
-                {/* Data table */}
                 <div style={styles.tableWrap}>
                   <table style={styles.table}>
                     <thead>
