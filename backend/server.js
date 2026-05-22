@@ -68,6 +68,25 @@ function ensureAddressesTable() {
   return addressesTableReady;
 }
 
+// Ensures the categories table exists. Categories can exist independently of products.
+let categoriesTableReady = null;
+function ensureCategoriesTable() {
+  if (!categoriesTableReady) {
+    categoriesTableReady = (async () => {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS categories (
+          name VARCHAR(100) NOT NULL PRIMARY KEY,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    })().catch((err) => {
+      categoriesTableReady = null;
+      throw err;
+    });
+  }
+  return categoriesTableReady;
+}
+
 // test route
 app.get("/", (req, res) => {
   res.send("Server is running with MySQL");
@@ -1613,19 +1632,58 @@ app.delete("/api/product-manager/products/:id", requireAuth, requireRole('produc
 });
 
 // GET /api/product-manager/categories — list distinct categories with product count
+// GET /api/product-manager/categories — list categories (union of products + categories table)
 app.get("/api/product-manager/categories", requireAuth, requireRole('product_manager'), async (_req, res) => {
   try {
+    await ensureCategoriesTable();
     const [rows] = await db.query(
-      `SELECT categoryName AS name, COUNT(*) AS productCount
-       FROM products
-       WHERE categoryName IS NOT NULL AND categoryName != ''
-       GROUP BY categoryName
-       ORDER BY categoryName`
+      `SELECT name, COALESCE(MAX(productCount), 0) AS productCount FROM (
+         SELECT categoryName AS name, COUNT(*) AS productCount
+         FROM products
+         WHERE categoryName IS NOT NULL AND categoryName != ''
+         GROUP BY categoryName
+         UNION ALL
+         SELECT name, 0 AS productCount FROM categories
+       ) AS combined
+       GROUP BY name
+       ORDER BY name`
     );
-    res.json(rows);
+    res.json(rows.map((r) => ({ name: r.name, productCount: Number(r.productCount) })));
   } catch (error) {
     console.error("List categories error:", error);
     res.status(500).json({ message: "Failed to fetch categories" });
+  }
+});
+
+// POST /api/product-manager/categories — add a new (empty) category
+app.post("/api/product-manager/categories", requireAuth, requireRole('product_manager'), async (req, res) => {
+  const { name } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ message: "name is required" });
+  }
+  const trimmed = String(name).trim();
+  if (trimmed.length > 100) {
+    return res.status(400).json({ message: "name must be at most 100 characters" });
+  }
+  try {
+    await ensureCategoriesTable();
+    // Reject duplicates whether they exist in products or in categories table
+    const [[{ count }]] = await db.query(
+      `SELECT COUNT(*) AS count FROM (
+         SELECT categoryName AS name FROM products WHERE categoryName = ?
+         UNION
+         SELECT name FROM categories WHERE name = ?
+       ) AS existing`,
+      [trimmed, trimmed]
+    );
+    if (Number(count) > 0) {
+      return res.status(409).json({ message: "Category already exists" });
+    }
+    await db.query('INSERT INTO categories (name) VALUES (?)', [trimmed]);
+    res.status(201).json({ name: trimmed, productCount: 0 });
+  } catch (error) {
+    console.error("Add category error:", error);
+    res.status(500).json({ message: "Failed to add category" });
   }
 });
 
@@ -1637,15 +1695,35 @@ app.put("/api/product-manager/categories/:name", requireAuth, requireRole('produ
     return res.status(400).json({ message: "newName is required" });
   }
   const trimmed = newName.trim();
+  if (trimmed === oldName) {
+    return res.status(400).json({ message: "newName must differ from current name" });
+  }
   try {
-    const [result] = await db.query(
+    await ensureCategoriesTable();
+    // Prevent renaming to an existing category
+    const [[{ count: collision }]] = await db.query(
+      `SELECT COUNT(*) AS count FROM (
+         SELECT categoryName AS name FROM products WHERE categoryName = ?
+         UNION
+         SELECT name FROM categories WHERE name = ?
+       ) AS existing`,
+      [trimmed, trimmed]
+    );
+    if (Number(collision) > 0) {
+      return res.status(409).json({ message: "Target category name already exists" });
+    }
+    const [productResult] = await db.query(
       'UPDATE products SET categoryName = ? WHERE categoryName = ?',
       [trimmed, oldName]
     );
-    if (result.affectedRows === 0) {
+    const [categoriesResult] = await db.query(
+      'UPDATE categories SET name = ? WHERE name = ?',
+      [trimmed, oldName]
+    );
+    if (productResult.affectedRows === 0 && categoriesResult.affectedRows === 0) {
       return res.status(404).json({ message: "Category not found" });
     }
-    res.json({ name: trimmed, productCount: result.affectedRows });
+    res.json({ name: trimmed, productCount: productResult.affectedRows });
   } catch (error) {
     console.error("Rename category error:", error);
     res.status(500).json({ message: "Failed to rename category" });
@@ -1656,6 +1734,7 @@ app.put("/api/product-manager/categories/:name", requireAuth, requireRole('produ
 app.delete("/api/product-manager/categories/:name", requireAuth, requireRole('product_manager'), async (req, res) => {
   const name = decodeURIComponent(req.params.name);
   try {
+    await ensureCategoriesTable();
     const [[{ count }]] = await db.query(
       'SELECT COUNT(*) AS count FROM products WHERE categoryName = ?',
       [name]
@@ -1663,6 +1742,7 @@ app.delete("/api/product-manager/categories/:name", requireAuth, requireRole('pr
     if (Number(count) > 0) {
       return res.status(409).json({ message: `Cannot delete: ${count} product(s) still use this category` });
     }
+    await db.query('DELETE FROM categories WHERE name = ?', [name]);
     res.json({ message: "Category deleted" });
   } catch (error) {
     console.error("Delete category error:", error);

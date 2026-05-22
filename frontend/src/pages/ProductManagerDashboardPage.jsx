@@ -116,6 +116,8 @@ export default function ProductManagerDashboardPage() {
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState(null);
   const [deletingCategory, setDeletingCategory] = useState(null);
   const [categoryBusy, setCategoryBusy] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [addingCategory, setAddingCategory] = useState(false);
 
   // Stock alerts state
   const [stockAlerts, setStockAlerts] = useState({ outOfStock: [], lowStock: [], totalAlerts: 0 });
@@ -449,6 +451,28 @@ export default function ProductManagerDashboardPage() {
       setError('Network error. Please try again.');
     } finally {
       setCategoryBusy(false);
+    }
+  }
+
+  async function addCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setAddingCategory(true);
+    setError('');
+    try {
+      const res = await fetch(apiUrl('/api/product-manager/categories'), {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.message || 'Failed to add category.'); return; }
+      setNewCategoryName('');
+      await loadCategories();
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setAddingCategory(false);
     }
   }
 
@@ -786,10 +810,42 @@ export default function ProductManagerDashboardPage() {
         {/* Category Management Tab */}
         {activeTab === 'categories' && (
           <>
+            <div style={{
+              display: 'flex',
+              gap: 'var(--space-2)',
+              alignItems: 'center',
+              marginBottom: 'var(--space-4)',
+              backgroundColor: 'var(--color-white)',
+              padding: 'var(--space-4)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--color-border)',
+            }}>
+              <input
+                style={{ ...styles.stockInput, flex: 1, maxWidth: 280 }}
+                placeholder="New category name"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCategory(); }}
+                disabled={addingCategory}
+              />
+              <button
+                style={{
+                  ...styles.stockBtn,
+                  backgroundColor: 'var(--color-black)',
+                  color: 'var(--color-white)',
+                  border: 'none',
+                  opacity: !newCategoryName.trim() || addingCategory ? 0.5 : 1,
+                }}
+                disabled={!newCategoryName.trim() || addingCategory}
+                onClick={addCategory}
+              >
+                {addingCategory ? 'Adding…' : 'Add Category'}
+              </button>
+            </div>
             {loading ? (
               <div style={styles.center}><span style={styles.centerText}>Loading...</span></div>
             ) : categories.length === 0 ? (
-              <div style={styles.empty}>No categories found.</div>
+              <div style={styles.empty}>No categories yet — add one above.</div>
             ) : (
               <div style={styles.tableContainer}>
                 <table style={styles.table}>
