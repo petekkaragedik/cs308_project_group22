@@ -108,6 +108,27 @@ export default function SalesManagerInvoicePage() {
     }
   };
 
+  const handleExportCsv = () => {
+    const header = ['Invoice #', 'Customer', 'Email', 'Date', 'Total (TRY)', 'Status'];
+    const lines = [
+      header.join(','),
+      ...invoices.map((inv) => [
+        inv.invoiceNumber,
+        `"${(inv.customerName || '').replace(/"/g, '""')}"`,
+        inv.customerEmail,
+        formatDate(inv.createdAt),
+        inv.total,
+        inv.status,
+      ].join(',')),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const suffix = startDate || endDate ? `_${startDate || 'start'}_to_${endDate || 'end'}` : '_all';
+    a.href = url; a.download = `invoices${suffix}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handlePrint = () => {
     const dateRange = startDate || endDate
       ? `Period: ${startDate || 'beginning'} → ${endDate || 'today'}`
@@ -201,9 +222,10 @@ export default function SalesManagerInvoicePage() {
         <div style={styles.titleRow}>
           <h1 style={styles.title}>Invoice Management</h1>
           {invoices.length > 0 && (
-            <button style={styles.printBtn} onClick={handlePrint}>
-              Print / Export
-            </button>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button style={styles.printBtn} onClick={handleExportCsv}>Export CSV</button>
+              <button style={styles.printBtn} onClick={handlePrint}>Print</button>
+            </div>
           )}
         </div>
         <p style={styles.subtitle}>View and download customer invoices. Filter by date range.</p>
@@ -303,15 +325,6 @@ export default function SalesManagerInvoicePage() {
       <Footer />
     </>
   );
-}
-
-function statusColor(status) {
-  switch (status) {
-    case 'delivered': return { backgroundColor: '#d1fae5', color: '#065f46' };
-    case 'in-transit': return { backgroundColor: '#dbeafe', color: '#1e40af' };
-    case 'processing': return { backgroundColor: '#fef3c7', color: '#92400e' };
-    default: return { backgroundColor: 'var(--color-border)', color: 'var(--color-charcoal)' };
-  }
 }
 
 const styles = {

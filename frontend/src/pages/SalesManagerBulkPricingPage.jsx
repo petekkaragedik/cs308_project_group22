@@ -63,9 +63,10 @@ export default function SalesManagerBulkPricingPage() {
 
   async function fetchProducts() {
     try {
-      const res = await fetch(apiUrl('/api/products'));
+      const res = await fetch(apiUrl('/api/products?limit=500'));
       const data = await res.json();
-      setProducts(data);
+      const list = Array.isArray(data) ? data : (data.data ?? []);
+      setProducts(list);
     } catch (err) {
       console.error('Failed to fetch products:', err);
     }
@@ -73,9 +74,10 @@ export default function SalesManagerBulkPricingPage() {
 
   async function fetchCategories() {
     try {
-      const res = await fetch(apiUrl('/api/products'));
+      const res = await fetch(apiUrl('/api/products?limit=500'));
       const data = await res.json();
-      const uniqueCategories = [...new Set(data.map(p => p.categoryName))].filter(Boolean);
+      const list = Array.isArray(data) ? data : (data.data ?? []);
+      const uniqueCategories = [...new Set(list.map(p => p.categoryName))].filter(Boolean);
       setCategories(uniqueCategories);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
