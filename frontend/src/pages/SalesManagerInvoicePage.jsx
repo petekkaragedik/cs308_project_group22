@@ -178,6 +178,15 @@ export default function SalesManagerInvoicePage() {
   );
 }
 
+function statusColor(status) {
+  switch (status) {
+    case 'delivered': return { backgroundColor: '#d1fae5', color: '#065f46' };
+    case 'in-transit': return { backgroundColor: '#dbeafe', color: '#1e40af' };
+    case 'processing': return { backgroundColor: '#fef3c7', color: '#92400e' };
+    default: return { backgroundColor: 'var(--color-border)', color: 'var(--color-charcoal)' };
+  }
+}
+
 const styles = {
   page: { minHeight: '70vh', backgroundColor: 'var(--color-sand)', padding: 'var(--space-10) var(--container-pad)', maxWidth: '1200px', margin: '0 auto' },
   backBtn: { background: 'none', border: 'none', padding: '0 0 var(--space-4) 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', cursor: 'pointer', display: 'block' },
