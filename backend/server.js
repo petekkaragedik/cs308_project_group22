@@ -1676,6 +1676,60 @@ app.use("/api/discounts", createDiscountRoutes(db, requireAuth, requireRole));
 app.use("/api/notifications", createNotificationRoutes(db, requireAuth));
 app.use("/api/products", createProductRoutes(db, requireAuth, requireRole));
 
+// GET /api/sales-manager/invoices — list all orders with optional date-range filtering
+app.get("/api/sales-manager/invoices", requireAuth, requireRole('sales_manager'), async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  const conditions = [];
+  const params = [];
+
+  if (startDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      return res.status(400).json({ message: 'startDate must be YYYY-MM-DD' });
+    }
+    conditions.push('DATE(o.created_at) >= ?');
+    params.push(startDate);
+  }
+  if (endDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return res.status(400).json({ message: 'endDate must be YYYY-MM-DD' });
+    }
+    conditions.push('DATE(o.created_at) <= ?');
+    params.push(endDate);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  try {
+    const [rows] = await db.query(
+      `SELECT o.id, o.invoice_number, o.customer_email, o.customer_name,
+              o.total_amount, o.currency, o.status, o.created_at
+       FROM orders o
+       ${where}
+       ORDER BY o.created_at DESC`,
+      params
+    );
+    const totalRevenue = rows.reduce((sum, r) => sum + Number(r.total_amount), 0);
+    res.json({
+      invoices: rows.map((o) => ({
+        orderId: o.id,
+        invoiceNumber: o.invoice_number,
+        customerEmail: o.customer_email,
+        customerName: o.customer_name,
+        total: Number(o.total_amount),
+        currency: o.currency,
+        status: o.status,
+        createdAt: o.created_at,
+      })),
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      count: rows.length,
+    });
+  } catch (error) {
+    console.error('sales-manager invoices error:', error);
+    res.status(500).json({ message: 'Could not load invoices' });
+  }
+});
+
 if (require.main === module) {
   app.listen(3001, () => {
     console.log("Server running on port 3001");
