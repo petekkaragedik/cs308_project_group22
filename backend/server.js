@@ -1026,6 +1026,17 @@ app.post("/api/products/:productId/ratings", requireAuth, async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    const [purchaseRows] = await db.query(
+      `SELECT 1 FROM orders o
+       JOIN order_items oi ON oi.order_id = o.id
+       WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'delivered'
+       LIMIT 1`,
+      [req.user.id, productId]
+    );
+    if (purchaseRows.length === 0) {
+      return res.status(403).json({ message: "You must purchase this product before rating it" });
+    }
+
     await db.query(
       `INSERT INTO ratings (user_id, product_id, rating) VALUES (?, ?, ?)
        ON DUPLICATE KEY UPDATE rating = VALUES(rating)`,
