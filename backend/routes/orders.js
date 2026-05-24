@@ -45,6 +45,29 @@ function buildPayloadFromRows(orderRow, itemRows) {
   };
 }
 
+const CANCELLABLE_STATUSES = ['processing'];
+
+function checkCancelEligibility(order, userId) {
+  if (!order) {
+    throw Object.assign(new Error('Order not found'), { statusCode: 404 });
+  }
+  if (order.user_id !== userId) {
+    throw Object.assign(new Error('This order does not belong to your account'), { statusCode: 403 });
+  }
+  if (order.status === 'cancelled') {
+    throw Object.assign(new Error('Order is already cancelled'), { statusCode: 409 });
+  }
+  if (order.status === 'in_transit') {
+    throw Object.assign(new Error('Order cannot be cancelled after shipment'), { statusCode: 409 });
+  }
+  if (order.status === 'delivered') {
+    throw Object.assign(new Error('Order cannot be cancelled after delivery'), { statusCode: 409 });
+  }
+  if (!CANCELLABLE_STATUSES.includes(order.status)) {
+    throw Object.assign(new Error(`Order cannot be cancelled in status: ${order.status}`), { statusCode: 409 });
+  }
+}
+
 module.exports = function createOrderRoutes(db, requireAuth) {
   const router = express.Router();
 
@@ -297,6 +320,58 @@ module.exports = function createOrderRoutes(db, requireAuth) {
     }
   });
 
+  /**
+   * PATCH /api/orders/:orderId/cancel
+   * Cancel a processing order. Restocks all ordered items.
+   */
+  router.patch('/:orderId/cancel', requireAuth, async (req, res) => {
+    const orderId = Number(req.params.orderId);
+    if (!Number.isFinite(orderId) || orderId < 1) {
+      return res.status(400).json({ message: 'Invalid order id' });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [[order]] = await conn.query(
+        'SELECT id, user_id, status FROM orders WHERE id = ? FOR UPDATE',
+        [orderId]
+      );
+
+      checkCancelEligibility(order, req.user.id);
+
+      const [items] = await conn.query(
+        'SELECT product_id, quantity FROM order_items WHERE order_id = ?',
+        [orderId]
+      );
+
+      for (const item of items) {
+        await conn.query(
+          'UPDATE products SET quantityInStock = quantityInStock + ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        );
+      }
+
+      await conn.query(
+        "UPDATE orders SET status = 'cancelled' WHERE id = ?",
+        [orderId]
+      );
+
+      await conn.commit();
+      return res.json({ message: 'Order cancelled', orderId, status: 'cancelled' });
+    } catch (error) {
+      try { await conn.rollback(); } catch (_) { /* ignore */ }
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+      console.error('cancel order error:', error);
+      return res.status(500).json({ message: 'Failed to cancel order' });
+    } finally {
+      conn.release();
+    }
+  });
+
   router.get('/:orderId/invoice/pdf', async (req, res) => {
     const orderId = Number(req.params.orderId);
     if (!Number.isFinite(orderId) || orderId < 1) {
@@ -364,3 +439,4 @@ module.exports = function createOrderRoutes(db, requireAuth) {
 module.exports.roundMoney = roundMoney;
 module.exports.buildPayloadFromRows = buildPayloadFromRows;
 module.exports.mapCheckoutError = mapCheckoutError;
+module.exports.checkCancelEligibility = checkCancelEligibility;
