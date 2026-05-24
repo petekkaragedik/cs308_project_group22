@@ -1,4 +1,4 @@
-const { roundMoney, buildPayloadFromRows, mapCheckoutError } = require("../routes/orders");
+const { roundMoney, buildPayloadFromRows, mapCheckoutError, checkCancelEligibility } = require("../routes/orders");
 
 describe("orders helpers - unit tests", () => {
   describe("roundMoney", () => {
@@ -32,14 +32,18 @@ describe("orders helpers - unit tests", () => {
     };
     const itemRows = [
       {
+        product_id: "BOARD-1",
         product_name: "Board",
+        color: "blue",
         size: "M",
         quantity: 2,
         unit_price: "49.95",
         line_total: "99.90",
       },
       {
+        product_id: "WAX-1",
         product_name: "Wax",
+        color: null,
         size: "OS",
         quantity: 1,
         unit_price: "100.00",
@@ -56,8 +60,8 @@ describe("orders helpers - unit tests", () => {
         currency: "TRY",
         total: 199.9,
         lines: [
-          { productName: "Board", size: "M", quantity: 2, unitPrice: 49.95, lineTotal: 99.9 },
-          { productName: "Wax", size: "OS", quantity: 1, unitPrice: 100, lineTotal: 100 },
+          { productId: "BOARD-1", productName: "Board", color: "blue", size: "M", quantity: 2, unitPrice: 49.95, lineTotal: 99.9 },
+          { productId: "WAX-1", productName: "Wax", color: null, size: "OS", quantity: 1, unitPrice: 100, lineTotal: 100 },
         ],
       });
     });
@@ -73,6 +77,49 @@ describe("orders helpers - unit tests", () => {
       const payload = buildPayloadFromRows({ ...orderRow, currency: null }, []);
       expect(payload.currency).toBe("TRY");
       expect(payload.lines).toEqual([]);
+    });
+  });
+
+  describe("checkCancelEligibility", () => {
+    const userId = 42;
+    const processingOrder = { id: 1, user_id: userId, status: "processing" };
+
+    function catchErr(fn) {
+      try { fn(); } catch (e) { return e; }
+    }
+
+    test("11. does not throw for a processing order owned by the user (successful cancellation)", () => {
+      expect(() => checkCancelEligibility(processingOrder, userId)).not.toThrow();
+    });
+
+    test("12. throws 404 when order does not exist", () => {
+      const err = catchErr(() => checkCancelEligibility(null, userId));
+      expect(err.message).toBe("Order not found");
+      expect(err.statusCode).toBe(404);
+    });
+
+    test("13. throws 403 when order belongs to a different user", () => {
+      const err = catchErr(() => checkCancelEligibility(processingOrder, 99));
+      expect(err.message).toBe("This order does not belong to your account");
+      expect(err.statusCode).toBe(403);
+    });
+
+    test("14. throws 409 when order is in_transit", () => {
+      const err = catchErr(() => checkCancelEligibility({ ...processingOrder, status: "in_transit" }, userId));
+      expect(err.message).toBe("Order cannot be cancelled after shipment");
+      expect(err.statusCode).toBe(409);
+    });
+
+    test("15. throws 409 when order is delivered", () => {
+      const err = catchErr(() => checkCancelEligibility({ ...processingOrder, status: "delivered" }, userId));
+      expect(err.message).toBe("Order cannot be cancelled after delivery");
+      expect(err.statusCode).toBe(409);
+    });
+
+    test("16. throws 409 when order is already cancelled", () => {
+      const err = catchErr(() => checkCancelEligibility({ ...processingOrder, status: "cancelled" }, userId));
+      expect(err.message).toBe("Order is already cancelled");
+      expect(err.statusCode).toBe(409);
     });
   });
 
