@@ -139,6 +139,9 @@ export default function OrderHistoryPage() {
                   order={order}
                   returnStatus={returns[order.orderId] ?? null}
                   onViewInvoice={() => navigate(`/invoice/${order.orderId}`)}
+                  onOrderCancelled={(orderId) =>
+                    setOrders(prev => prev.map(o => o.orderId === orderId ? { ...o, status: 'cancelled' } : o))
+                  }
                 />
               ))}
             </div>
@@ -153,7 +156,10 @@ export default function OrderHistoryPage() {
 
 /* ─── Order Summary Card ───────────────────────────── */
 
-function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
+function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled }) {
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.processing;
   const { Icon } = cfg;
   const itemCount = order.items?.length ?? 0;
@@ -162,6 +168,34 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
   const withinWindow = order.placedAt && Date.now() - new Date(order.placedAt).getTime() <= THIRTY_DAYS_MS;
   const canReturn = order.status === 'delivered' && !returnStatus && withinWindow;
+
+  async function handleCancel() {
+    if (!window.confirm('Are you sure you want to cancel this order?')) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.orderId}/cancel`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        onOrderCancelled(order.orderId);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        setCancelError('You are not authorized to cancel this order.');
+      } else if (res.status === 409) {
+        setCancelError('This order cannot be cancelled.');
+      } else {
+        setCancelError(data.message || 'Failed to cancel order. Please try again.');
+      }
+    } catch {
+      setCancelError('Failed to cancel order. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div style={styles.card}>
@@ -216,10 +250,22 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice }) {
         <button style={styles.btnPrimary} onClick={onViewInvoice}>
           {order.status === 'delivered' ? 'View Details' : 'Track Order'}
         </button>
+        {order.status === 'processing' && (
+          <button
+            style={{ ...styles.btnCancel, opacity: cancelling ? 0.6 : 1 }}
+            onClick={handleCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel Order'}
+          </button>
+        )}
         {canReturn && (
           <span style={styles.returnHint}>Return available</span>
         )}
       </div>
+      {cancelError && (
+        <p style={styles.cancelError}>{cancelError}</p>
+      )}
     </div>
   );
 }
@@ -260,6 +306,8 @@ const styles = {
 
   cardActions: { display: 'flex', alignItems: 'center', gap: 'var(--space-3, 0.75rem)' },
   btnPrimary: { padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-charcoal, #374151)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
+  btnCancel: { padding: '8px 20px', borderRadius: 8, border: '1px solid #dc2626', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: '#dc2626', cursor: 'pointer' },
+  cancelError: { fontSize: 'var(--text-xs, 0.75rem)', color: '#dc2626', margin: '8px 0 0', padding: '6px 10px', background: '#fee2e2', borderRadius: 6 },
   returnHint: { fontSize: 'var(--text-xs, 0.75rem)', color: 'var(--color-charcoal-light, #6b7280)' },
   itemLink: { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--color-border, #e5e7eb)' },
   metaColor: { color: 'var(--color-charcoal-light, #6b7280)', fontSize: 'var(--text-xs, 0.75rem)' },
