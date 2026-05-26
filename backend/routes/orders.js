@@ -76,7 +76,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
    * Requires authentication. Body: { customerName?, items: [{ product_id, size, quantity }] }
    */
   router.post('/mock-checkout', requireAuth, async (req, res) => {
-    const { customerName, items } = req.body;
+    const { customerName, items, addressId } = req.body;
     const customerEmail = req.user.email;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -208,9 +208,9 @@ module.exports = function createOrderRoutes(db, requireAuth) {
 
       const userId = req.user && req.user.id ? req.user.id : null;
       const [orderResult] = await conn.query(
-        `INSERT INTO orders (user_id, invoice_number, customer_email, customer_name, total_amount, currency, status)
-         VALUES (?, ?, ?, ?, ?, 'TRY', 'processing')`,
-        [userId, invoice_number, email, name, total]
+        `INSERT INTO orders (user_id, invoice_number, customer_email, customer_name, total_amount, currency, status, address_id)
+         VALUES (?, ?, ?, ?, ?, 'TRY', 'processing', ?)`,
+        [userId, invoice_number, email, name, total, addressId || null]
       );
       const orderId = orderResult.insertId;
       
