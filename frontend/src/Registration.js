@@ -28,6 +28,7 @@ function Registration() {
         setLoading(false);
         if (data.token) {
           sessionStorage.setItem("token", data.token);
+          sessionStorage.setItem("user", JSON.stringify(data.user));
           window.location.href = "/products";
         } else {
           setError(data.message || "Registration failed");
