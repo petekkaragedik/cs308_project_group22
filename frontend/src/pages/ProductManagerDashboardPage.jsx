@@ -1085,6 +1085,16 @@ export default function ProductManagerDashboardPage() {
                           <span style={styles.orderLabel}>Date:</span>
                           <span style={styles.orderValue}>{formatDate(o.created_at)}</span>
                         </div>
+                        {/*ADDRESS SECTION*/}
+                        <div style={{ ...styles.orderDetail, alignItems: 'flex-start', marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px dashed var(--color-border)' }}>
+                          <span style={styles.orderLabel}>Shipping:</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right' }}>
+                            <span style={styles.orderValue}>{o.recipient}</span>
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.line1}</span>
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.city}{o.postal ? `, ${o.postal}` : ''}</span>
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.country}</span>
+                          </div>
+                        </div>
                       </div>
 
                       {canUpdate && (
