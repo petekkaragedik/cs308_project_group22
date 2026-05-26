@@ -1418,9 +1418,11 @@ app.get("/api/product-manager/deliveries", requireAuth, requireRole('product_man
       SELECT
         o.id, o.invoice_number, o.status, o.created_at, o.total_amount, o.currency,
         o.customer_email, o.customer_name,
-        COUNT(oi.id) as item_count
+        COUNT(oi.id) as item_count,
+        a.recipient, a.line1, a.city, a.postal, a.country
       FROM orders o
       LEFT JOIN order_items oi ON o.id = oi.order_id
+      LEFT JOIN addresses a ON o.address_id = a.id
     `;
 
     const params = [];
@@ -1432,7 +1434,19 @@ app.get("/api/product-manager/deliveries", requireAuth, requireRole('product_man
     query += " GROUP BY o.id ORDER BY o.created_at DESC";
 
     const [rows] = await db.query(query, params);
-    res.json(rows);
+
+    // Flex: Decrypt the secure addresses before sending to the frontend dashboard
+    const formattedRows = rows.map(row => ({
+      ...row,
+      recipient: row.recipient ? decrypt(row.recipient) : 'No recipient',
+      line1: row.line1 ? decrypt(row.line1) : 'No address provided',
+      city: row.city ? decrypt(row.city) : '',
+      postal: row.postal ? decrypt(row.postal) : '',
+      country: row.country || ''
+    }));
+
+    res.json(formattedRows);
+    
   } catch (error) {
     console.error("Deliveries fetch error:", error);
     res.status(500).json({ message: "Failed to fetch deliveries" });
