@@ -14,6 +14,6 @@ CREATE TABLE IF NOT EXISTS addresses (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS address_id INT;
+ALTER TABLE orders ADD COLUMN address_id INT;
 
 ALTER TABLE orders ADD CONSTRAINT fk_order_address FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL;
