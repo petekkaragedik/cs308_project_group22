@@ -5,10 +5,15 @@ import { apiUrl } from './apiBase';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
-function getPostLoginTarget(search) {
+const ROLE_HOME = {
+  product_manager: '/product-manager/dashboard',
+  sales_manager: '/sales-manager/dashboard',
+};
+
+function getPostLoginTarget(search, role) {
   const raw = new URLSearchParams(search).get('next');
   if (raw && /^\/[^/]/.test(raw)) return raw;
-  return '/products';
+  return ROLE_HOME[role] || '/products';
 }
 
 function Login() {
@@ -30,7 +35,8 @@ function Login() {
       .then(data => {
         if (data.token) {
           sessionStorage.setItem("token", data.token);
-          window.location.href = getPostLoginTarget(location.search);
+          sessionStorage.setItem("user", JSON.stringify(data.user));
+          window.location.href = getPostLoginTarget(location.search, data.user?.role);
         } else {
           setError(data.message || 'Invalid email or password.');
         }

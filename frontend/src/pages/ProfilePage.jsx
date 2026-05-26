@@ -81,6 +81,7 @@ export default function ProfilePage() {
       .then((res) => {
         if (res.status === 401) {
           sessionStorage.removeItem('token');
+          sessionStorage.removeItem('user');
           navigate('/login');
           throw new Error('auth');
         }
@@ -110,6 +111,7 @@ export default function ProfilePage() {
 
   function handleLogout() {
     sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     navigate('/login');
   }
 
