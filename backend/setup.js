@@ -53,9 +53,12 @@ async function setup() {
       total_amount DECIMAL(14,2) NOT NULL,
       currency VARCHAR(3) NOT NULL DEFAULT 'TRY',
       status ENUM('processing', 'in_transit', 'delivered', 'cancelled') NOT NULL DEFAULT 'processing',
+      address_id INT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-      INDEX idx_orders_user (user_id)
+      FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL,
+      INDEX idx_orders_user (user_id),
+      INDEX idx_orders_address (address_id)
     )
   `);
   console.log('Orders table ready');
@@ -70,6 +73,21 @@ async function setup() {
     `);
     await db.execute(`
       ALTER TABLE orders ADD INDEX idx_orders_user (user_id)
+    `);
+  } catch (e) {
+    // Column already exists, ignore error
+  }
+
+  // Add address_id column if it doesn't exist (for existing databases)
+  try {
+    await db.execute(`
+      ALTER TABLE orders ADD COLUMN address_id INT DEFAULT NULL
+    `);
+    await db.execute(`
+      ALTER TABLE orders ADD FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL
+    `);
+    await db.execute(`
+      ALTER TABLE orders ADD INDEX idx_orders_address (address_id)
     `);
   } catch (e) {
     // Column already exists, ignore error
