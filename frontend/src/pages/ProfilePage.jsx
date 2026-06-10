@@ -90,11 +90,13 @@ export default function ProfilePage() {
       })
       .then((data) => {
         setUser({
+          id: data.id,
           fullName: data.name,
           email: data.email,
           phone: '',
           avatar: null,
           role: data.role,
+          taxId: data.tax_id || '',
         });
         setLoading(false);
       })
@@ -206,7 +208,13 @@ export default function ProfilePage() {
           {/* Main */}
           <main style={styles.main}>
             {tab === 'profile' && (
-              <ProfileSection user={user} setUser={setUser} onSaved={() => showToast('Profile updated')} />
+              <ProfileSection
+                user={user}
+                setUser={setUser}
+                onSaved={() => showToast('Profile updated')}
+                onGoToAddresses={() => setTab('addresses')}
+                onGoToSecurity={() => setTab('security')}
+              />
             )}
             {tab === 'orders' && <OrdersSection onNotify={showToast} />}
             {tab === 'security' && <SecuritySection email={user.email} onDone={showToast} />}
@@ -257,15 +265,27 @@ function SidebarTab({ icon, label, active, onClick }) {
 
 /* ─── Profile section ───────────────────────────────── */
 
-function ProfileSection({ user, setUser, onSaved }) {
+function ProfileSection({ user, setUser, onSaved, onGoToAddresses, onGoToSecurity }) {
   const fileRef = useRef(null);
   const [form, setForm] = useState(user);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [defaultAddress, setDefaultAddress] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/profile/addresses', { headers: authHeaders() })
+      .then((r) => r.ok ? r.json() : [])
+      .then((list) => {
+        if (!Array.isArray(list)) return;
+        const def = list.find((a) => a.is_default) || list[0] || null;
+        setDefaultAddress(def);
+      })
+      .catch(() => {});
+  }, []);
 
   const dirty =
     form.fullName !== user.fullName ||
-    form.phone !== user.phone ||
+    form.taxId !== user.taxId ||
     form.avatar !== user.avatar;
 
   function onPickFile(e) {
@@ -283,33 +303,22 @@ function ProfileSection({ user, setUser, onSaved }) {
   async function save() {
     setSaveError(null);
     const trimmedName = form.fullName.trim();
-    if (!trimmedName) {
-      setSaveError('Name is required.');
-      return;
-    }
+    if (!trimmedName) { setSaveError('Name is required.'); return; }
 
-    const nameChanged = trimmedName !== user.fullName;
     setSaving(true);
     try {
-      if (nameChanged) {
-        const token = sessionStorage.getItem('token');
-        const res = await fetch('/api/profile', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ name: trimmedName }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || 'Failed to update profile');
-        }
-        const data = await res.json();
-        setUser({ ...form, fullName: data.name, email: data.email });
-      } else {
-        setUser(form);
+      const token = sessionStorage.getItem('token');
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: trimmedName, tax_id: form.taxId || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to update profile');
       }
+      const data = await res.json();
+      setUser({ ...form, fullName: data.name, email: data.email, taxId: data.tax_id || '' });
       onSaved?.();
     } catch (err) {
       setSaveError(err.message || 'Failed to update profile');
@@ -318,14 +327,13 @@ function ProfileSection({ user, setUser, onSaved }) {
     }
   }
 
-  function reset() {
-    setForm(user);
-    setSaveError(null);
-  }
+  function reset() { setForm(user); setSaveError(null); }
+
+  const readonlyInput = { ...styles.input, color: 'var(--color-charcoal-light)', background: 'var(--color-sand)' };
 
   return (
     <Card>
-      <SectionHeader title="Profile details" subtitle="This is how others will see you on Scylla." />
+      <SectionHeader title="Account information" subtitle="Your personal details on Scylla." />
 
       {/* Avatar */}
       <div style={styles.avatarRow}>
@@ -338,15 +346,8 @@ function ProfileSection({ user, setUser, onSaved }) {
           <div className="pf-avatar-overlay" style={styles.avatarOverlay}>
             <Camera size={22} color="var(--color-white)" />
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            onChange={onPickFile}
-            style={{ display: 'none' }}
-          />
+          <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
         </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           <button className="pf-btn-ghost" style={styles.btnGhost} onClick={() => fileRef.current?.click()}>
             <Camera size={16} /> Upload new photo
@@ -362,8 +363,13 @@ function ProfileSection({ user, setUser, onSaved }) {
 
       <Divider />
 
-      {/* Fields */}
       <div style={styles.fieldGrid}>
+        {/* ID — read-only */}
+        <Field label="Customer ID" hint="Your unique account identifier.">
+          <input className="pf-input" style={readonlyInput} value={user.id ?? '—'} readOnly />
+        </Field>
+
+        {/* Name — editable */}
         <Field label="Full name">
           <input
             className="pf-input"
@@ -373,23 +379,37 @@ function ProfileSection({ user, setUser, onSaved }) {
           />
         </Field>
 
-        <Field label="Email" hint="To change email, contact support.">
+        {/* Tax ID — editable */}
+        <Field label="Tax ID" hint="Your personal tax identification number.">
           <input
             className="pf-input"
-            style={{ ...styles.input, color: 'var(--color-charcoal-light)' }}
-            value={form.email}
+            style={styles.input}
+            value={form.taxId}
+            onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+            placeholder="e.g. 12345678901"
+          />
+        </Field>
+
+        {/* Email — read-only */}
+        <Field label="E-mail address" hint="To change your email, contact support.">
+          <input className="pf-input" style={readonlyInput} value={form.email} readOnly />
+        </Field>
+
+        {/* Home address — read-only summary, link to Addresses tab */}
+        <Field label="Home address" hint={<button className="pf-link" style={{ ...styles.hint, color: 'var(--color-charcoal)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }} onClick={onGoToAddresses}>Manage addresses →</button>}>
+          <input
+            className="pf-input"
+            style={readonlyInput}
+            value={defaultAddress
+              ? [defaultAddress.line1, defaultAddress.city, defaultAddress.postal, defaultAddress.country].filter(Boolean).join(', ')
+              : 'No address saved'}
             readOnly
           />
         </Field>
 
-        <Field label="Phone">
-          <input
-            className="pf-input"
-            style={styles.input}
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            placeholder="+90 ..."
-          />
+        {/* Password — masked, link to Security tab */}
+        <Field label="Password" hint={<button className="pf-link" style={{ ...styles.hint, color: 'var(--color-charcoal)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }} onClick={onGoToSecurity}>Change password →</button>}>
+          <input className="pf-input" style={readonlyInput} value="••••••••••••" readOnly />
         </Field>
       </div>
 
@@ -400,21 +420,12 @@ function ProfileSection({ user, setUser, onSaved }) {
       )}
 
       <div style={styles.footerActions}>
-        <button
-          className="pf-btn-ghost"
-          style={styles.btnGhost}
-          disabled={!dirty || saving}
-          onClick={reset}
-        >
+        <button className="pf-btn-ghost" style={styles.btnGhost} disabled={!dirty || saving} onClick={reset}>
           Cancel
         </button>
         <button
           className="pf-btn-primary"
-          style={{
-            ...styles.btnPrimary,
-            opacity: dirty && !saving ? 1 : 0.5,
-            cursor: dirty && !saving ? 'pointer' : 'not-allowed',
-          }}
+          style={{ ...styles.btnPrimary, opacity: dirty && !saving ? 1 : 0.5, cursor: dirty && !saving ? 'pointer' : 'not-allowed' }}
           disabled={!dirty || saving}
           onClick={save}
         >

@@ -74,7 +74,7 @@ export default function NotificationsPage() {
         {!loading && notifications.length === 0 && (
           <EmptyState
             heading="No notifications yet"
-            body="When your wishlisted items go on sale, you'll see notifications here."
+            body="You'll be notified when your wishlisted items go on sale or when a refund is approved."
             cta="GO TO WISHLIST"
             onCta={() => navigate('/wishlist')}
             secondaryCta="Continue shopping →"

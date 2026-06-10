@@ -14,10 +14,11 @@ const DASHBOARD_TABS = [
 ];
 
 const ORDER_STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
   { key: 'processing', label: 'Processing' },
   { key: 'in_transit', label: 'In Transit' },
   { key: 'delivered', label: 'Delivered' },
-  { key: 'all', label: 'All' },
+  { key: 'cancelled', label: 'Cancelled' },
 ];
 
 function authHeaders() {
@@ -81,7 +82,7 @@ function orderStatusBadge(status) {
 export default function ProductManagerDashboardPage() {
   const navigate = useNavigate();
   const [authState, setAuthState] = useState('checking');
-  const [activeTab, setActiveTab] = useState('stock');
+  const [activeTab, setActiveTab] = useState('products');
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -93,7 +94,7 @@ export default function ProductManagerDashboardPage() {
 
   // Delivery state
   const [orders, setOrders] = useState([]);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('processing');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   // Comment moderation state
@@ -569,6 +570,9 @@ export default function ProductManagerDashboardPage() {
       <Navbar />
 
       <div style={styles.page}>
+        <button style={styles.backBtn} onClick={() => navigate(-1)}>
+          ← Back
+        </button>
         <h1 style={styles.title}>Product Manager Dashboard</h1>
         <p style={styles.subtitle}>
           Manage product stock, track deliveries, and moderate customer comments.
@@ -624,8 +628,8 @@ export default function ProductManagerDashboardPage() {
           ))}
         </div>
 
-        {/* Stock Alerts Section */}
-        <div style={styles.alertsSection}>
+        {/* Stock Alerts Section — products tab only */}
+        {activeTab === 'products' && <div style={styles.alertsSection}>
           <div style={styles.alertsSectionHeader}>
             <AlertTriangle size={18} color="var(--color-charcoal)" />
             <span style={styles.alertsSectionTitle}>Stock Alerts</span>
@@ -705,7 +709,7 @@ export default function ProductManagerDashboardPage() {
               )}
             </>
           )}
-        </div>
+        </div>}
 
         {error && <div style={styles.errorBox}>{error}</div>}
 
@@ -1059,44 +1063,74 @@ export default function ProductManagerDashboardPage() {
 
                   return (
                     <div key={o.id} style={styles.card}>
+                      {/* Header: invoice + status */}
                       <div style={styles.cardHeader}>
                         <div>
                           <div style={styles.invoiceNumber}>#{o.invoice_number}</div>
-                          <div style={styles.orderMeta}>
-                            {o.customer_name} · {o.customer_email}
-                          </div>
+                          <div style={styles.orderMeta}>{formatDate(o.created_at)}</div>
                         </div>
                         <span style={orderStatusBadge(o.status)}>
                           {String(o.status).replace(/_/g, ' ')}
                         </span>
                       </div>
+
+                      {/* IDs row */}
                       <div style={styles.orderDetails}>
                         <div style={styles.orderDetail}>
-                          <span style={styles.orderLabel}>Total:</span>
-                          <span style={styles.orderValue}>
-                            ₺{Number(o.total_amount).toFixed(2)} {o.currency || 'TRY'}
-                          </span>
+                          <span style={styles.orderLabel}>Delivery ID:</span>
+                          <span style={styles.orderValue}>{o.id}</span>
                         </div>
                         <div style={styles.orderDetail}>
-                          <span style={styles.orderLabel}>Items:</span>
-                          <span style={styles.orderValue}>{o.item_count}</span>
+                          <span style={styles.orderLabel}>Customer ID:</span>
+                          <span style={styles.orderValue}>{o.user_id ?? o.customer_email}</span>
                         </div>
                         <div style={styles.orderDetail}>
-                          <span style={styles.orderLabel}>Date:</span>
-                          <span style={styles.orderValue}>{formatDate(o.created_at)}</span>
+                          <span style={styles.orderLabel}>Customer:</span>
+                          <span style={styles.orderValue}>{o.customer_name}</span>
                         </div>
-                        {/*ADDRESS SECTION*/}
-                        <div style={{ ...styles.orderDetail, alignItems: 'flex-start', marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px dashed var(--color-border)' }}>
-                          <span style={styles.orderLabel}>Shipping:</span>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right' }}>
-                            <span style={styles.orderValue}>{o.recipient}</span>
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.line1}</span>
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.city}{o.postal ? `, ${o.postal}` : ''}</span>
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-charcoal)' }}>{o.country}</span>
-                          </div>
+                        <div style={styles.orderDetail}>
+                          <span style={styles.orderLabel}>Total Price:</span>
+                          <span style={styles.orderValue}>₺{Number(o.total_amount).toFixed(2)}</span>
                         </div>
                       </div>
 
+                      {/* Products table */}
+                      {o.items && o.items.length > 0 && (
+                        <div style={{ marginTop: 'var(--space-3)', borderTop: '1px dashed var(--color-border)', paddingTop: 'var(--space-3)' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-charcoal-light)', marginBottom: 6 }}>Products</div>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                {['Product ID', 'Name', 'Qty', 'Price'].map(h => (
+                                  <th key={h} style={{ textAlign: 'left', padding: '4px 8px', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-light)', fontWeight: 600 }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {o.items.map((it, idx) => (
+                                <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                  <td style={{ padding: '5px 8px', color: 'var(--color-charcoal)', fontFamily: 'monospace', fontSize: 12 }}>{it.product_id}</td>
+                                  <td style={{ padding: '5px 8px', color: 'var(--color-charcoal)' }}>{it.product_name}</td>
+                                  <td style={{ padding: '5px 8px', color: 'var(--color-charcoal)', textAlign: 'center' }}>{it.quantity}</td>
+                                  <td style={{ padding: '5px 8px', color: 'var(--color-charcoal)', textAlign: 'right' }}>₺{Number(it.line_total).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Delivery address */}
+                      <div style={{ marginTop: 'var(--space-3)', borderTop: '1px dashed var(--color-border)', paddingTop: 'var(--space-3)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <span style={{ ...styles.orderLabel, paddingTop: 2 }}>Delivery Address:</span>
+                        <div style={{ textAlign: 'right', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', lineHeight: 1.5 }}>
+                          <div style={{ fontWeight: 600 }}>{o.recipient}</div>
+                          <div>{o.line1}</div>
+                          <div>{[o.postal, o.city].filter(Boolean).join(' ')}{o.country ? `, ${o.country}` : ''}</div>
+                        </div>
+                      </div>
+
+                      {/* Status update */}
                       {canUpdate && (
                         <div style={styles.statusUpdateSection}>
                           <div style={styles.statusUpdateLabel}>Update Status:</div>
@@ -1247,6 +1281,16 @@ const styles = {
     padding: 'var(--space-10) var(--container-pad)',
     maxWidth: '1200px',
     margin: '0 auto',
+  },
+  backBtn: {
+    background: 'none',
+    border: 'none',
+    padding: '0 0 var(--space-4) 0',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-charcoal)',
+    cursor: 'pointer',
+    display: 'block',
   },
   title: {
     margin: 0,
@@ -1792,12 +1836,32 @@ const styles = {
 
 /* ─── Product Form Modal ──────────────────────────────── */
 
+const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL'];
+
+const COLOR_OPTIONS = [
+  'Anthracite','Batik','Beige','Beige-Orange-Black','Black','Black Silver','Black White',
+  'Blue','Blue - White','Blue Green','Blue White','Blue White Black','Brown',
+  'Brown - Orange Iridescent','Brown Cream','Brown White','Cream','Cream Beige',
+  'Cream Light Yellow','Cyan-Purple','Dark Magenta','Ecru','Gold Glow','Green','Grey',
+  'Grey White','Khaki','Lavender','Light Brown Beige','Light Brown White','Lilac',
+  'Lilac-Pink','Milky Brown','Multicolor','Natural','Natural DK2','Navy','Navy Pink',
+  'Pink','Pink White','Purple','Purple White','Raw','Red','Red - White','Red Star',
+  'Red White','Sage Green','Silver','Silver-Grey','Sunshine','Terracotta','Turquoise',
+  'Water Green','White','White Beige','White Black','White Blue','White Milky Brown',
+  'White Purple','White Turquoise','Yellow','Yellow-Navy',
+];
+
 const EMPTY_FORM = {
   name: '', model: '', serialNumber: '', description: '',
   quantityInStock: '0', price: '', warrantyStatus: false,
   distributorInfo: 'scyllastore', categoryName: '', color: '',
-  size: '', gender: '', vatRate: '10', images: '',
+  sizes: [], gender: '', vatRate: '10', images: [],
 };
+
+function parseSizes(sizeStr) {
+  if (!sizeStr) return [];
+  return sizeStr.split(',').map((s) => s.trim()).filter(Boolean);
+}
 
 function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error }) {
   const isEdit = mode === 'edit';
@@ -1815,32 +1879,76 @@ function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error 
         distributorInfo: product.distributorInfo || 'scyllastore',
         categoryName: product.categoryName || '',
         color: product.color || '',
-        size: product.size || '',
+        sizes: parseSizes(product.size),
         gender: product.gender || '',
         vatRate: String(product.vatRate ?? 10),
-        images: imgs.join('\n'),
+        images: imgs,
       };
     }
     return EMPTY_FORM;
   });
 
+  const [categories, setCategories] = useState([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  useEffect(() => {
+    fetch(apiUrl('/api/product-manager/categories'), { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((data) => setCategories(Array.isArray(data) ? data.map((c) => c.name || c.categoryName || c).filter(Boolean) : []))
+      .catch(() => {});
+  }, []);
+
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  async function handleImageFiles(e) {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    const remaining = 8 - form.images.length;
+    if (remaining <= 0) return;
+    const toUpload = files.slice(0, remaining);
+
+    setUploadingImages(true);
+    setUploadError('');
+    try {
+      const data = new FormData();
+      toUpload.forEach((f) => data.append('images', f));
+      const res = await fetch(apiUrl('/api/product-manager/upload-images'), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: data,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const { urls } = await res.json();
+      set('images', [...form.images, ...urls]);
+    } catch (err) {
+      setUploadError('Image upload failed. Please try again.');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = '';
+    }
+  }
+
+  function removeImage(idx) {
+    set('images', form.images.filter((_, i) => i !== idx));
+  }
+
+  function toggleSize(s) {
+    set('sizes', form.sizes.includes(s) ? form.sizes.filter((x) => x !== s) : [...form.sizes, s]);
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
-    const images = form.images
-      .split('\n')
-      .map((u) => u.trim())
-      .filter(Boolean);
     onSubmit({
       ...form,
       quantityInStock: Number(form.quantityInStock) || 0,
       price: Number(form.price),
       vatRate: Number(form.vatRate) || 10,
       warrantyStatus: form.warrantyStatus ? 1 : 0,
-      images,
+      size: form.sizes.join(','),
+      images: form.images,
     });
   }
 
@@ -1867,14 +1975,38 @@ function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error 
             <Field label="Price (TRY) *" required>
               <input style={modalStyles.input} type="number" min="0" step="0.01" value={form.price} onChange={(e) => set('price', e.target.value)} required />
             </Field>
-            <Field label="Category">
-              <input style={modalStyles.input} value={form.categoryName} onChange={(e) => set('categoryName', e.target.value)} />
+            <Field label="Category *">
+              <select style={modalStyles.input} value={form.categoryName} onChange={(e) => set('categoryName', e.target.value)} required>
+                <option value="">— Select category —</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </Field>
             <Field label="Color">
-              <input style={modalStyles.input} value={form.color} onChange={(e) => set('color', e.target.value)} />
+              <select style={modalStyles.input} value={form.color} onChange={(e) => set('color', e.target.value)}>
+                <option value="">— Select color —</option>
+                {COLOR_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </Field>
             <Field label="Size">
-              <input style={modalStyles.input} value={form.size} onChange={(e) => set('size', e.target.value)} placeholder="e.g. S, M, L" />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {SIZE_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggleSize(s)}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: 20,
+                      border: '1px solid var(--color-border)',
+                      background: form.sizes.includes(s) ? 'var(--color-accent, #c8a96e)' : 'var(--color-bg-input, #f5f0e8)',
+                      color: form.sizes.includes(s) ? '#fff' : 'var(--color-text)',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: form.sizes.includes(s) ? 600 : 400,
+                    }}
+                  >{s}</button>
+                ))}
+              </div>
             </Field>
             <Field label="Gender">
               <select style={modalStyles.input} value={form.gender} onChange={(e) => set('gender', e.target.value)}>
@@ -1908,8 +2040,27 @@ function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error 
             <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} value={form.description} onChange={(e) => set('description', e.target.value)} rows={3} />
           </Field>
 
-          <Field label="Image URLs (one per line)">
-            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} value={form.images} onChange={(e) => set('images', e.target.value)} rows={3} placeholder="https://..." />
+          <Field label={`Photos (${form.images.length}/8)`}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {form.images.map((url, idx) => (
+                <div key={idx} style={{ position: 'relative', width: 72, height: 72 }}>
+                  <img src={url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--color-border)' }} />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(idx)}
+                    style={{ position: 'absolute', top: -6, right: -6, background: 'var(--color-danger, #c0392b)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12, lineHeight: '20px', textAlign: 'center', padding: 0 }}
+                    aria-label="Remove image"
+                  >×</button>
+                </div>
+              ))}
+              {form.images.length < 8 && (
+                <label style={{ width: 72, height: 72, border: '2px dashed var(--color-border)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: uploadingImages ? 'wait' : 'pointer', color: 'var(--color-muted)', fontSize: 11, gap: 2 }}>
+                  {uploadingImages ? '...' : <><span style={{ fontSize: 22 }}>+</span><span>Add photo</span></>}
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImageFiles} disabled={uploadingImages} />
+                </label>
+              )}
+            </div>
+            {uploadError && <div style={{ color: 'var(--color-danger, #c0392b)', fontSize: 12 }}>{uploadError}</div>}
           </Field>
 
           {error && <div style={modalStyles.errorBox}>{error}</div>}
@@ -1918,7 +2069,7 @@ function ProductFormModal({ mode, product, onClose, onSubmit, submitting, error 
             <button type="button" className="pm-cancel-btn" style={modalStyles.cancelBtn} onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="pm-submit-btn" style={modalStyles.submitBtn} disabled={submitting}>
+            <button type="submit" className="pm-submit-btn" style={modalStyles.submitBtn} disabled={submitting || uploadingImages}>
               {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Product'}
             </button>
           </div>

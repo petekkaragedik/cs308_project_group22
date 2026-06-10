@@ -1,10 +1,9 @@
 const express = require('express');
-const { checkRole } = require('../middleware/auth');
 
 module.exports = function createProductRoutes(db, requireAuth, requireRole) {
   const router = express.Router();
 
-  router.put('/:id/price', checkRole(['sales_manager']), async (req, res) => {
+  router.put('/:id/price', requireAuth, requireRole('sales_manager'), async (req, res) => {
     const productId = req.params.id;
     const { newPrice } = req.body;
     const numericPrice = Number(newPrice);

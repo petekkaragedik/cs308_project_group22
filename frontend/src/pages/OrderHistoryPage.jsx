@@ -37,6 +37,7 @@ export default function OrderHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [returnOrder, setReturnOrder] = useState(null);
 
   useEffect(() => {
     if (!sessionStorage.getItem('token')) {
@@ -142,6 +143,7 @@ export default function OrderHistoryPage() {
                   onOrderCancelled={(orderId) =>
                     setOrders(prev => prev.map(o => o.orderId === orderId ? { ...o, status: 'cancelled' } : o))
                   }
+                  onReturnRequest={() => setReturnOrder(order)}
                 />
               ))}
             </div>
@@ -150,15 +152,27 @@ export default function OrderHistoryPage() {
         </div>
       </main>
       <Footer />
+
+      {returnOrder && (
+        <ReturnRequestModal
+          order={returnOrder}
+          onClose={() => setReturnOrder(null)}
+          onSuccess={() => {
+            setReturns((prev) => ({ ...prev, [returnOrder.orderId]: 'pending' }));
+            setReturnOrder(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── Order Summary Card ───────────────────────────── */
 
-function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled }) {
+function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled, onReturnRequest }) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.processing;
   const { Icon } = cfg;
@@ -170,7 +184,6 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled
   const canReturn = order.status === 'delivered' && !returnStatus && withinWindow;
 
   async function handleCancel() {
-    if (!window.confirm('Are you sure you want to cancel this order?')) return;
     setCancelling(true);
     setCancelError(null);
     try {
@@ -250,21 +263,45 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled
         <button style={styles.btnPrimary} onClick={onViewInvoice}>
           {order.status === 'delivered' ? 'View Details' : 'Track Order'}
         </button>
-        {order.status === 'processing' && (
+        {order.status === 'processing' && !confirmCancel && (
           <button
             style={{ ...styles.btnCancel, opacity: cancelling ? 0.6 : 1 }}
-            onClick={handleCancel}
+            onClick={() => setConfirmCancel(true)}
             disabled={cancelling}
           >
-            {cancelling ? 'Cancelling…' : 'Cancel Order'}
+            Cancel Order
           </button>
         )}
         {canReturn && (
-          <span style={styles.returnHint}>Return available</span>
+          <button style={styles.btnReturn} onClick={onReturnRequest}>Request return</button>
+        )}
+        {order.status === 'delivered' && !canReturn && !returnStatus && (
+          <button style={{ ...styles.btnReturn, opacity: 0.4, cursor: 'not-allowed' }} disabled title="Return window has expired (30 days)">Return expired</button>
         )}
       </div>
       {cancelError && (
         <p style={styles.cancelError}>{cancelError}</p>
+      )}
+      {confirmCancel && (
+        <div style={styles.confirmBox}>
+          <p style={styles.confirmText}>Are you sure you want to cancel this order?</p>
+          <div style={styles.confirmActions}>
+            <button
+              style={styles.confirmNo}
+              onClick={() => setConfirmCancel(false)}
+              disabled={cancelling}
+            >
+              Keep order
+            </button>
+            <button
+              style={{ ...styles.confirmYes, opacity: cancelling ? 0.6 : 1 }}
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -308,7 +345,20 @@ const styles = {
   btnPrimary: { padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-charcoal, #374151)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
   btnCancel: { padding: '8px 20px', borderRadius: 8, border: '1px solid #dc2626', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: '#dc2626', cursor: 'pointer' },
   cancelError: { fontSize: 'var(--text-xs, 0.75rem)', color: '#dc2626', margin: '8px 0 0', padding: '6px 10px', background: '#fee2e2', borderRadius: 6 },
+  confirmBox: { marginTop: 'var(--space-3, 0.75rem)', padding: '12px 14px', background: 'var(--color-sand, #f5f0e8)', borderRadius: 8, border: '1px solid var(--color-border, #e5e7eb)' },
+  confirmText: { fontSize: 'var(--text-sm, 0.875rem)', color: 'var(--color-charcoal, #374151)', margin: '0 0 10px' },
+  confirmActions: { display: 'flex', gap: 8 },
+  confirmNo: { padding: '6px 16px', borderRadius: 8, border: '1px solid var(--color-border, #e5e7eb)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 500, color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
+  confirmYes: { padding: '6px 16px', borderRadius: 8, border: 'none', background: '#dc2626', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 500, color: 'white', cursor: 'pointer' },
   returnHint: { fontSize: 'var(--text-xs, 0.75rem)', color: 'var(--color-charcoal-light, #6b7280)' },
+  btnReturn: { padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-charcoal, #374151)', background: 'white', fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 'var(--weight-medium, 500)', color: 'var(--color-charcoal, #374151)', cursor: 'pointer' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' },
+  modal: { background: 'white', borderRadius: 12, padding: '2rem', width: '100%', maxWidth: 440 },
+  modalTitle: { fontSize: 'var(--text-xl, 1.25rem)', fontWeight: 600, margin: '0 0 1rem' },
+  modalLabel: { fontSize: 'var(--text-sm, 0.875rem)', fontWeight: 500, color: 'var(--color-charcoal, #374151)', display: 'block', marginBottom: 6 },
+  modalTextarea: { width: '100%', minHeight: 100, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--color-border, #e5e7eb)', fontSize: 'var(--text-sm, 0.875rem)', resize: 'vertical', boxSizing: 'border-box' },
+  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: '1.5rem' },
+  modalErr: { fontSize: 'var(--text-xs, 0.75rem)', color: '#dc2626', marginTop: 8 },
   itemLink: { color: 'inherit', textDecoration: 'underline', textDecorationColor: 'var(--color-border, #e5e7eb)' },
   metaColor: { color: 'var(--color-charcoal-light, #6b7280)', fontSize: 'var(--text-xs, 0.75rem)' },
 
@@ -318,3 +368,59 @@ const styles = {
   errorBox: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderRadius: 8, background: '#fee2e2', color: '#991b1b', fontSize: 'var(--text-sm, 0.875rem)' },
   retryBtn: { marginLeft: 'auto', background: 'none', border: 'none', color: '#991b1b', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 'inherit' },
 };
+
+/* ─── Return Request Modal ─────────────────────────── */
+
+function ReturnRequestModal({ order, onClose, onSuccess }) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/returns', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: order.orderId, reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to submit return request');
+      onSuccess();
+    } catch (e) {
+      setErr(e.message || 'Failed to submit return request');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={styles.modal}>
+        <h2 style={styles.modalTitle}>Request return</h2>
+        <p style={{ fontSize: 'var(--text-sm, 0.875rem)', color: 'var(--color-charcoal-light, #6b7280)', margin: '0 0 1rem' }}>
+          Order {order.id}
+        </p>
+        <form onSubmit={handleSubmit}>
+          <label style={styles.modalLabel}>Reason for return</label>
+          <textarea
+            style={styles.modalTextarea}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Please describe why you want to return this order…"
+            required
+          />
+          {err && <p style={styles.modalErr}>{err}</p>}
+          <div style={styles.modalActions}>
+            <button type="button" style={styles.btnPrimary} onClick={onClose}>Cancel</button>
+            <button type="submit" style={{ ...styles.btnPrimary, background: 'var(--color-charcoal, #1f2937)', color: 'white' }} disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit request'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

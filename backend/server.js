@@ -8,6 +8,8 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const multer = require('multer');
+const fs = require('fs');
 const createProductRoutes = require('./routes/products');
 const { sendPasswordResetEmail } = require('./services/passwordResetEmail');
 
@@ -22,6 +24,11 @@ const app = express();
 // Allow browser calls from CRA (any port / localhost vs 127.0.0.1) when using REACT_APP_API_URL
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+// Serve uploaded product images
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+app.use('/uploads', express.static(uploadsDir));
 
 
 // db connection
@@ -297,7 +304,7 @@ app.post("/api/reset-password", async (req, res) => {
 app.get("/api/profile", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, role, tax_id, created_at FROM users WHERE id = ?",
       [req.user.id]
     );
     if (rows.length === 0) {
@@ -310,9 +317,9 @@ app.get("/api/profile", requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/profile — update authenticated user's name
+// PUT /api/profile — update authenticated user's name and/or tax_id
 app.put("/api/profile", requireAuth, async (req, res) => {
-  const { name } = req.body;
+  const { name, tax_id } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: "Name is required" });
@@ -324,14 +331,14 @@ app.put("/api/profile", requireAuth, async (req, res) => {
 
   try {
     const [result] = await db.query(
-      "UPDATE users SET name = ? WHERE id = ?",
-      [trimmed, req.user.id]
+      "UPDATE users SET name = ?, tax_id = ? WHERE id = ?",
+      [trimmed, tax_id ?? null, req.user.id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "User not found" });
     }
     const [rows] = await db.query(
-      "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, role, tax_id, created_at FROM users WHERE id = ?",
       [req.user.id]
     );
     res.json(rows[0]);
@@ -1414,39 +1421,48 @@ app.get("/api/product-manager/deliveries", requireAuth, requireRole('product_man
   }
 
   try {
-    let query = `
+    let ordersQuery = `
       SELECT
-        o.id, o.invoice_number, o.status, o.created_at, o.total_amount, o.currency,
+        o.id, o.user_id, o.invoice_number, o.status, o.created_at, o.total_amount, o.currency,
         o.customer_email, o.customer_name,
-        COUNT(oi.id) as item_count,
         a.recipient, a.line1, a.city, a.postal, a.country
       FROM orders o
-      LEFT JOIN order_items oi ON o.id = oi.order_id
       LEFT JOIN addresses a ON o.address_id = a.id
     `;
-
     const params = [];
     if (status !== 'all') {
-      query += " WHERE o.status = ?";
+      ordersQuery += " WHERE o.status = ?";
       params.push(status);
     }
+    ordersQuery += " ORDER BY o.created_at DESC";
 
-    query += " GROUP BY o.id ORDER BY o.created_at DESC";
+    const [rows] = await db.query(ordersQuery, params);
+    if (rows.length === 0) return res.json([]);
 
-    const [rows] = await db.query(query, params);
+    const orderIds = rows.map(r => r.id);
+    const [itemRows] = await db.query(
+      `SELECT order_id, product_id, product_name, quantity, line_total FROM order_items WHERE order_id IN (?)`,
+      [orderIds]
+    );
 
-    // Flex: Decrypt the secure addresses before sending to the frontend dashboard
+    const itemsByOrder = {};
+    for (const item of itemRows) {
+      if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+      itemsByOrder[item.order_id].push(item);
+    }
+
     const formattedRows = rows.map(row => ({
       ...row,
       recipient: row.recipient ? decrypt(row.recipient) : 'No recipient',
       line1: row.line1 ? decrypt(row.line1) : 'No address provided',
       city: row.city ? decrypt(row.city) : '',
       postal: row.postal ? decrypt(row.postal) : '',
-      country: row.country || ''
+      country: row.country || '',
+      items: itemsByOrder[row.id] || [],
     }));
 
     res.json(formattedRows);
-    
+
   } catch (error) {
     console.error("Deliveries fetch error:", error);
     res.status(500).json({ message: "Failed to fetch deliveries" });
@@ -1888,6 +1904,30 @@ app.get("/api/sales-manager/revenue", requireAuth, requireRole('sales_manager'),
     console.error('sales-manager revenue error:', error);
     res.status(500).json({ message: 'Could not load revenue data' });
   }
+});
+
+/* ── Product image upload ─────────────────────────────── */
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 8 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
+
+app.post('/api/product-manager/upload-images', requireAuth, requireRole('product_manager'), imageUpload.array('images', 8), (req, res) => {
+  if (!req.files || req.files.length === 0) return res.status(400).json({ message: 'No images uploaded' });
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const urls = req.files.map(f => `${baseUrl}/uploads/${f.filename}`);
+  res.json({ urls });
 });
 
 if (require.main === module) {

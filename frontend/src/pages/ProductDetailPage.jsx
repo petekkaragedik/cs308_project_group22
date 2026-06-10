@@ -740,47 +740,70 @@ export default function ProductDetailPage() {
             {approvedReviews.length === 0 ? (
               <p style={styles.ratingCount}>No reviews yet. Be the first to share your thoughts.</p>
             ) : (
-              approvedReviews.map((r) => (
-                <div key={r.id} style={styles.reviewCard}>
-                  <div style={styles.reviewHeader}>
-                    <span style={styles.reviewerName}>{r.user_name || 'Customer'}</span>
-                    <span style={styles.reviewDate}>{formatReviewDate(r.created_at)}</span>
+              approvedReviews.map((r) => {
+                const isOwn = myReview?.comment?.id === r.id;
+                return (
+                  <div key={r.id} style={styles.reviewCard}>
+                    <div style={styles.reviewHeader}>
+                      <span style={styles.reviewerName}>{r.user_name || 'Customer'}</span>
+                      <span style={styles.reviewDate}>{formatReviewDate(r.created_at)}</span>
+                      {isOwn && !isEditing && (
+                        <div style={styles.myCommentActions}>
+                          <button className="pdp-edit-comment-btn" style={styles.myCommentIconBtn} onClick={handleStartEdit} title="Edit comment">
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            className="pdp-delete-comment-btn"
+                            style={{ ...styles.myCommentIconBtn, color: deletingComment ? 'var(--color-charcoal-light)' : '#dc2626' }}
+                            disabled={deletingComment}
+                            onClick={handleDeleteComment}
+                            title="Delete comment"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p style={styles.reviewComment}>{r.body}</p>
                   </div>
-                  <p style={styles.reviewComment}>{r.body}</p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
-          {/* User's own comment (pending / rejected) — shown before the form */}
-          {myReview?.comment && !isEditing && (
+          {/* User's own comment — only shown separately when pending/rejected (approved comment is already in the list above) */}
+          {myReview?.comment && !isEditing && myReview.comment.status !== 'approved' && (
             <div style={styles.myCommentCard}>
               <div style={styles.myCommentHeader}>
-                <span style={styles.myCommentLabel}>Your Comment</span>
-                <span style={{
-                  ...styles.myCommentBadge,
-                  backgroundColor: myReview.comment.status === 'approved'
-                    ? 'var(--color-success)'
-                    : myReview.comment.status === 'rejected'
-                    ? 'var(--color-error)'
-                    : 'var(--color-warning)',
-                  color: myReview.comment.status === 'rejected' ? '#991b1b' : 'var(--color-black)',
-                }}>
-                  {myReview.comment.status.toUpperCase()}
-                </span>
+                <div style={styles.myCommentLabelRow}>
+                  <span style={styles.myCommentLabel}>Your comment</span>
+                  <span style={{
+                    ...styles.myCommentStatus,
+                    color: myReview.comment.status === 'approved'
+                      ? '#065f46'
+                      : myReview.comment.status === 'rejected'
+                      ? '#991b1b'
+                      : 'var(--color-charcoal-light)',
+                  }}>
+                    {myReview.comment.status === 'approved'
+                      ? '· Approved'
+                      : myReview.comment.status === 'rejected'
+                      ? '· Not approved'
+                      : '· Pending review'}
+                  </span>
+                </div>
                 <div style={styles.myCommentActions}>
-                  <button className="pdp-edit-comment-btn" style={styles.myCommentBtn} onClick={handleStartEdit}>
-                    <Pencil size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                    Edit
+                  <button className="pdp-edit-comment-btn" style={styles.myCommentIconBtn} onClick={handleStartEdit} title="Edit comment">
+                    <Pencil size={14} />
                   </button>
                   <button
                     className="pdp-delete-comment-btn"
-                    style={styles.myCommentBtn}
+                    style={{ ...styles.myCommentIconBtn, color: deletingComment ? 'var(--color-charcoal-light)' : '#dc2626' }}
                     disabled={deletingComment}
                     onClick={handleDeleteComment}
+                    title="Delete comment"
                   >
-                    <Trash2 size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                    {deletingComment ? '...' : 'Delete'}
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -1381,47 +1404,39 @@ const styles = {
   myCommentHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--space-3)',
+    justifyContent: 'space-between',
     marginBottom: 'var(--space-3)',
-    flexWrap: 'wrap',
+  },
+  myCommentLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
   },
   myCommentLabel: {
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
     fontWeight: 'var(--weight-semibold)',
     color: 'var(--color-charcoal)',
-    letterSpacing: 'var(--tracking-wide)',
-    textTransform: 'uppercase',
   },
-  myCommentBadge: {
+  myCommentStatus: {
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-xs)',
-    fontWeight: 'var(--weight-semibold)',
-    letterSpacing: 'var(--tracking-wide)',
-    textTransform: 'uppercase',
-    padding: '2px var(--space-2)',
-    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-regular)',
   },
   myCommentActions: {
-    marginLeft: 'auto',
     display: 'flex',
-    gap: 'var(--space-2)',
+    gap: 'var(--space-1)',
   },
-  myCommentBtn: {
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-md)',
-    padding: 'var(--space-1) var(--space-3)',
-    backgroundColor: 'var(--color-white)',
-    color: 'var(--color-charcoal)',
-    fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-xs)',
-    fontWeight: 'var(--weight-semibold)',
-    letterSpacing: 'var(--tracking-wide)',
-    textTransform: 'uppercase',
+  myCommentIconBtn: {
+    background: 'none',
+    border: 'none',
+    padding: 'var(--space-1)',
     cursor: 'pointer',
+    color: 'var(--color-charcoal-light)',
     display: 'inline-flex',
     alignItems: 'center',
-    transition: 'background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast)',
+    borderRadius: 'var(--radius-sm)',
+    transition: 'color var(--transition-fast)',
   },
   myCommentBody: {
     margin: 0,

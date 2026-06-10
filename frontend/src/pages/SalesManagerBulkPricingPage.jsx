@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { apiUrl } from '../apiBase';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -259,12 +259,12 @@ export default function SalesManagerBulkPricingPage() {
   return (
     <>
       <Navbar />
-      <div style={styles.page}>
+      <div style={{ ...styles.page, paddingBottom: selectedProducts.length > 0 ? 200 : undefined }}>
         <button style={styles.backBtn} onClick={() => navigate('/sales-manager/dashboard')}>
           ← Back to Dashboard
         </button>
 
-        <h1 style={styles.title}>Bulk Pricing Manager</h1>
+        <h1 style={styles.title} id="bulk-top">Bulk Pricing Manager</h1>
         <p style={styles.subtitle}>
           Select multiple products to update prices or create discount campaigns.
         </p>
@@ -329,7 +329,11 @@ export default function SalesManagerBulkPricingPage() {
                       onChange={() => toggleProduct(product.id)}
                     />
                   </td>
-                  <td style={styles.td}>{product.name}</td>
+                  <td style={styles.td}>
+                    <Link to={`/products/${product.id}`} style={styles.productLink} target="_blank" rel="noopener noreferrer">
+                      {product.name}
+                    </Link>
+                  </td>
                   <td style={styles.td}>{product.categoryName || '-'}</td>
                   <td style={styles.td}>₺{product.price}</td>
                   <td style={styles.td}>{product.quantityInStock}</td>
@@ -339,10 +343,14 @@ export default function SalesManagerBulkPricingPage() {
           </table>
         </div>
 
-        {/* Action Panel */}
+        {/* Action Panel — fixed to bottom */}
         {selectedProducts.length > 0 && (
           <div style={styles.actionPanel}>
-            <h2 style={styles.actionTitle}>Bulk Actions</h2>
+            <div style={styles.actionPanelInner}>
+            <h2 style={styles.actionTitle}>
+              Bulk Actions
+              <span style={styles.selectedCount}>{selectedProducts.length} product{selectedProducts.length !== 1 ? 's' : ''} selected</span>
+            </h2>
 
             <div style={styles.tabs}>
               <button
@@ -533,18 +541,15 @@ export default function SalesManagerBulkPricingPage() {
                 </button>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Result Message */}
-        {resultMessage && (
-          <div style={{
-            ...styles.resultMessage,
-            backgroundColor: resultMessage.type === 'success'
-              ? 'var(--color-success)'
-              : 'var(--color-error)'
-          }}>
-            {resultMessage.text}
+              {resultMessage && (
+                <div style={{
+                  ...styles.resultMessage,
+                  backgroundColor: resultMessage.type === 'success' ? 'var(--color-success)' : 'var(--color-error)'
+                }}>
+                  {resultMessage.text}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -651,107 +656,145 @@ const styles = {
     color: 'var(--color-charcoal)',
   },
   actionPanel: {
-    backgroundColor: 'var(--color-white)',
+    position: 'fixed',
+    bottom: 'var(--space-6)',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    width: 'min(calc(100vw - 48px), 920px)',
+    backgroundColor: 'var(--color-charcoal)',
     borderRadius: 'var(--radius-lg)',
-    padding: 'var(--space-6)',
-    marginBottom: 'var(--space-6)',
-    boxShadow: 'var(--shadow-card)',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.30)',
+    zIndex: 100,
+  },
+  actionPanelInner: {
+    padding: 'var(--space-4) var(--space-6)',
   },
   actionTitle: {
-    margin: '0 0 var(--space-4) 0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 'var(--space-3)',
     fontFamily: 'var(--font-heading)',
-    fontSize: 'var(--text-xl)',
-    color: 'var(--color-black)',
+    fontSize: 'var(--text-base)',
+    fontWeight: 'var(--weight-regular)',
+    color: 'var(--color-sand)',
+  },
+  selectedCount: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
+    fontFamily: 'var(--font-body)',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    color: 'var(--color-charcoal)',
+    backgroundColor: 'var(--color-yellow)',
+    padding: '2px var(--space-3)',
+    borderRadius: 'var(--radius-full)',
   },
   tabs: {
     display: 'flex',
     gap: 'var(--space-2)',
-    marginBottom: 'var(--space-6)',
+    marginBottom: 'var(--space-4)',
   },
   tab: {
     flex: 1,
-    padding: 'var(--space-3)',
+    padding: 'var(--space-2) var(--space-3)',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
-    border: '1px solid var(--color-border)',
+    border: '1px solid rgba(255,255,255,0.2)',
     borderRadius: 'var(--radius-md)',
-    backgroundColor: 'var(--color-white)',
+    backgroundColor: 'transparent',
+    color: 'rgba(255,255,255,0.6)',
     cursor: 'pointer',
   },
   tabActive: {
     flex: 1,
-    padding: 'var(--space-3)',
+    padding: 'var(--space-2) var(--space-3)',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
     fontWeight: 'var(--weight-medium)',
-    border: '1px solid var(--color-black)',
+    border: '1px solid var(--color-sand)',
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'var(--color-sand)',
+    color: 'var(--color-charcoal)',
     cursor: 'pointer',
   },
   actionContent: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: 'var(--space-4)',
+    flexWrap: 'wrap',
   },
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
+    flex: '1 1 140px',
   },
   formRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 'var(--space-4)',
+    display: 'contents',
   },
   label: {
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-sm)',
+    fontSize: 'var(--text-xs)',
     fontWeight: 'var(--weight-medium)',
-    color: 'var(--color-charcoal)',
-    marginBottom: 'var(--space-2)',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.55)',
+    marginBottom: 'var(--space-1)',
   },
   input: {
-    padding: 'var(--space-3)',
+    padding: 'var(--space-2) var(--space-3)',
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-base)',
-    border: '1px solid var(--color-border)',
+    fontSize: 'var(--text-sm)',
+    border: '1px solid rgba(255,255,255,0.18)',
     borderRadius: 'var(--radius-md)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: 'var(--color-sand)',
   },
   radioGroup: {
     display: 'flex',
-    gap: 'var(--space-4)',
-    marginTop: 'var(--space-2)',
+    gap: 'var(--space-3)',
+    marginTop: 'var(--space-1)',
+    flexWrap: 'wrap',
   },
   radioLabel: {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--space-2)',
+    gap: 'var(--space-1)',
     cursor: 'pointer',
+    fontFamily: 'var(--font-body)',
+    fontSize: 'var(--text-sm)',
+    color: 'rgba(255,255,255,0.85)',
   },
   hint: {
     marginTop: 'var(--space-1)',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-xs)',
-    color: 'var(--color-charcoal-light)',
+    color: 'rgba(255,255,255,0.45)',
   },
   submitBtn: {
-    padding: 'var(--space-3) var(--space-6)',
+    padding: 'var(--space-2) var(--space-5)',
     fontFamily: 'var(--font-body)',
-    fontSize: 'var(--text-base)',
-    fontWeight: 'var(--weight-medium)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 'var(--weight-semibold)',
     border: 'none',
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'var(--color-yellow)',
+    color: 'var(--color-charcoal)',
     cursor: 'pointer',
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-end',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   resultMessage: {
-    padding: 'var(--space-4)',
+    padding: 'var(--space-3) var(--space-4)',
     borderRadius: 'var(--radius-md)',
     fontFamily: 'var(--font-body)',
     fontSize: 'var(--text-sm)',
-    color: 'var(--color-black)',
-    marginTop: 'var(--space-4)',
+    color: 'var(--color-charcoal)',
+    marginTop: 'var(--space-3)',
   },
   center: {
     minHeight: '60vh',
@@ -759,5 +802,10 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  productLink: {
+    color: 'var(--color-charcoal)',
+    textDecoration: 'underline',
+    textDecorationColor: 'var(--color-border)',
   },
 };

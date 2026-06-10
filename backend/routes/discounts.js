@@ -116,9 +116,7 @@ module.exports = function createDiscountRoutes(db, requireAuth, requireRole) {
     } catch (error) {
       if (conn) await conn.rollback();
       console.error('Create campaign error:', error);
-      console.error('Error details:', error.message);
-      console.error('SQL Error Code:', error.code);
-      res.status(500).json({ message: 'Failed to create campaign', error: error.message });
+      res.status(500).json({ message: 'Failed to create campaign' });
     } finally {
       if (conn) conn.release();
     }

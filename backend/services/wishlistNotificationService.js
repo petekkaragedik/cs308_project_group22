@@ -71,7 +71,7 @@ function createWishlistNotificationService(db) {
     const [userWishlists] = await conn.query(`
       SELECT
         f.user_id,
-        JSON_ARRAYAGG(f.product_id) as wishlisted_product_ids,
+        GROUP_CONCAT(f.product_id) as wishlisted_product_ids,
         COUNT(f.product_id) as product_count
       FROM favorites f
       WHERE f.product_id IN (?)
@@ -102,13 +102,17 @@ function createWishlistNotificationService(db) {
 
       const message = `${campaign.name} - ${discountText}`;
 
+      const productIds = typeof uw.wishlisted_product_ids === 'string'
+        ? uw.wishlisted_product_ids.split(',')
+        : uw.wishlisted_product_ids;
+
       return [
         uw.user_id,
         'wishlist_discount',
         title,
         message,
         campaignId,
-        JSON.stringify(typeof uw.wishlisted_product_ids === 'string' ? JSON.parse(uw.wishlisted_product_ids) : uw.wishlisted_product_ids),
+        JSON.stringify(productIds),
         null // read_at
       ];
     });

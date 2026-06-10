@@ -135,7 +135,7 @@ module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
       await conn.beginTransaction();
 
       const [[returnReq]] = await conn.query(
-        'SELECT id, status, order_id FROM return_requests WHERE id = ? FOR UPDATE',
+        'SELECT id, status, order_id, user_id FROM return_requests WHERE id = ? FOR UPDATE',
         [id]
       );
       if (!returnReq) {
@@ -148,7 +148,7 @@ module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
       }
 
       const [[order]] = await conn.query(
-        'SELECT total_amount FROM orders WHERE id = ?',
+        'SELECT total_amount, currency, invoice_number FROM orders WHERE id = ?',
         [returnReq.order_id]
       );
 
@@ -172,6 +172,23 @@ module.exports = function createReturnRoutes(db, requireAuth, requireRole) {
       );
 
       await conn.commit();
+
+      // Notify the customer — fire-and-forget, refund already committed
+      try {
+        const currency = order.currency || 'TL';
+        const invoiceRef = order.invoice_number ? ` (Invoice #${order.invoice_number})` : ` #${returnReq.order_id}`;
+        await conn.query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES (?, 'system', 'Your refund has been approved', ?)`,
+          [
+            returnReq.user_id,
+            `Your return request for order${invoiceRef} has been approved. A refund of ${order.total_amount} ${currency} will be processed to your account.`,
+          ]
+        );
+      } catch (notifErr) {
+        console.error('Refund approval notification failed:', notifErr);
+      }
+
       return res.json({
         message: 'Return request approved',
         id,

@@ -1,7 +1,9 @@
 const express = require('express');
+const crypto = require('crypto');
 const { generateInvoicePdfBuffer } = require('../services/invoicePdf');
 const { sendInvoiceEmail } = require('../services/mailInvoice');
 const { resolveBestDiscount } = require('../services/discountCalculator');
+const { decrypt } = require('../utils/encrypt');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -204,7 +206,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
       }
 
       const total = roundMoney(resolvedLines.reduce((s, l) => s + l.line_total, 0));
-      const invoice_number = `INV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const invoice_number = `INV-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
       const userId = req.user && req.user.id ? req.user.id : null;
       const [orderResult] = await conn.query(
@@ -372,7 +374,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
     }
   });
 
-  router.get('/:orderId/invoice/pdf', async (req, res) => {
+  router.get('/:orderId/invoice/pdf', requireAuth, async (req, res) => {
     const orderId = Number(req.params.orderId);
     if (!Number.isFinite(orderId) || orderId < 1) {
       return res.status(400).json({ message: 'Invalid order id' });
@@ -383,11 +385,18 @@ module.exports = function createOrderRoutes(db, requireAuth) {
       if (orderRows.length === 0) {
         return res.status(404).json({ message: 'Order not found' });
       }
+      const order = orderRows[0];
+      // Ownership: must be the order's customer, or a sales/product manager
+      const isManager = ['sales_manager', 'product_manager'].includes(req.user.role);
+      const isOwner = order.user_id === req.user.id || order.customer_email === req.user.email;
+      if (!isOwner && !isManager) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
       const [itemRows] = await db.query(
         `SELECT oi.*, p.color FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
         [orderId]
       );
-      const payload = buildPayloadFromRows(orderRows[0], itemRows);
+      const payload = buildPayloadFromRows(order, itemRows);
       const pdfBuffer = await generateInvoicePdfBuffer(payload);
       const safe = String(payload.invoiceNumber).replace(/[^\w.-]+/g, '_');
       res.setHeader('Content-Type', 'application/pdf');
@@ -399,23 +408,45 @@ module.exports = function createOrderRoutes(db, requireAuth) {
     }
   });
 
-  router.get('/:orderId/invoice', async (req, res) => {
+  router.get('/:orderId/invoice', requireAuth, async (req, res) => {
     const orderId = Number(req.params.orderId);
     if (!Number.isFinite(orderId) || orderId < 1) {
       return res.status(400).json({ message: 'Invalid order id' });
     }
 
     try {
-      const [orderRows] = await db.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+      const [orderRows] = await db.query(
+        `SELECT o.*, a.recipient, a.line1, a.city, a.postal, a.country
+         FROM orders o
+         LEFT JOIN addresses a ON a.id = o.address_id
+         WHERE o.id = ?`,
+        [orderId]
+      );
       if (orderRows.length === 0) {
         return res.status(404).json({ message: 'Order not found' });
+      }
+      const o = orderRows[0];
+      const isManager = ['sales_manager', 'product_manager'].includes(req.user.role);
+      const isOwner = o.user_id === req.user.id || o.customer_email === req.user.email;
+      if (!isOwner && !isManager) {
+        return res.status(403).json({ message: 'Access denied' });
       }
       const [itemRows] = await db.query(
         `SELECT oi.*, p.color FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ? ORDER BY oi.id`,
         [orderId]
       );
-      const o = orderRows[0];
       const payload = buildPayloadFromRows(o, itemRows);
+
+      const address = o.line1
+        ? {
+            recipient: decrypt(o.recipient) || '',
+            line1: decrypt(o.line1) || '',
+            city: decrypt(o.city) || '',
+            postal: o.postal ? decrypt(o.postal) : '',
+            country: o.country || '',
+          }
+        : null;
+
       return res.json({
         orderId: o.id,
         invoiceNumber: o.invoice_number,
@@ -426,6 +457,7 @@ module.exports = function createOrderRoutes(db, requireAuth) {
         currency: o.currency,
         total: Number(o.total_amount),
         lines: payload.lines,
+        address,
       });
     } catch (error) {
       console.error('invoice json error:', error);

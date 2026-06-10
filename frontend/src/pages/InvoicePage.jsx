@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useLocation } from 'react-router-dom';
+import { Link, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Clock, Truck, CheckCircle2 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { apiUrl } from '../apiBase';
+
+function authHeaders() {
+  const token = sessionStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 function formatMoney(n) {
   return (
@@ -91,20 +96,29 @@ function DeliveryTimeline({ status }) {
 export default function InvoicePage() {
   const { orderId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const emailSentFlag = location.state?.emailSent;
   const emailDetail = location.state?.emailDetail;
   const emailReason = location.state?.emailReason;
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
+    const token = sessionStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(apiUrl(`/api/orders/${orderId}/invoice`));
+        const res = await fetch(apiUrl(`/api/orders/${orderId}/invoice`), {
+          headers: authHeaders(),
+        });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (!cancelled) setErr(json.message || 'Could not load invoice.');
@@ -120,9 +134,26 @@ export default function InvoicePage() {
     return () => {
       cancelled = true;
     };
-  }, [orderId]);
+  }, [orderId, navigate]);
 
-  const pdfHref = apiUrl(`/api/orders/${orderId}/invoice/pdf`);
+  async function handleDownloadPdf() {
+    setPdfLoading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/orders/${orderId}/invoice/pdf`), {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${orderId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   return (
     <>
@@ -173,9 +204,9 @@ export default function InvoicePage() {
                   </p>
                 </div>
                 <div style={styles.actions}>
-                  <a href={pdfHref} download style={styles.downloadBtn}>
-                    Download PDF
-                  </a>
+                  <button onClick={handleDownloadPdf} disabled={pdfLoading} style={styles.downloadBtn}>
+                    {pdfLoading ? 'Downloading…' : 'Download PDF'}
+                  </button>
                 </div>
               </div>
 
@@ -186,6 +217,21 @@ export default function InvoicePage() {
                 <p style={styles.bodyText}>{data.customerName || 'Customer'}</p>
                 <p style={styles.bodyText}>{data.customerEmail}</p>
               </div>
+
+              {data.address && (
+                <div style={styles.billBlock}>
+                  <p style={styles.sectionLabel}>Delivery address</p>
+                  {data.address.recipient && (
+                    <p style={styles.bodyText}>{data.address.recipient}</p>
+                  )}
+                  <p style={styles.bodyText}>{data.address.line1}</p>
+                  <p style={styles.bodyText}>
+                    {[data.address.city, data.address.postal, data.address.country]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
+                </div>
+              )}
 
               <table style={styles.table}>
                 <thead>
@@ -338,7 +384,8 @@ const styles = {
     backgroundColor: 'var(--color-yellow)',
     color: 'var(--color-black)',
     borderRadius: 'var(--radius-md)',
-    textDecoration: 'none',
+    border: 'none',
+    cursor: 'pointer',
     fontFamily: 'var(--font-body)',
     fontWeight: 'var(--weight-semibold)',
     fontSize: 'var(--text-sm)',

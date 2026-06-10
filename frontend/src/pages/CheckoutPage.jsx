@@ -56,7 +56,7 @@ export default function CheckoutPage() {
     [cartItems, getProduct]
   );
 
-  async function placeOrder({ email, name, shippingAddress }) {
+  async function placeOrder({ email, name, shippingAddress, addressId }) {
     setError(null);
     if (cartItems.length === 0) {
       setError('Your cart is empty.');
@@ -64,12 +64,34 @@ export default function CheckoutPage() {
     }
     setSubmitting(true);
     try {
+      // For a brand-new address entered at checkout, save it first to get an ID.
+      let resolvedAddressId = addressId;
+      if (!resolvedAddressId && shippingAddress?.line1) {
+        const saveRes = await fetch(apiUrl('/api/profile/addresses'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({
+            label: 'Checkout address',
+            recipient: shippingAddress.recipient || name || '',
+            line1: shippingAddress.line1,
+            city: shippingAddress.city,
+            postal: shippingAddress.postal || '',
+            country: shippingAddress.country || 'Türkiye',
+            isDefault: false,
+          }),
+        });
+        if (saveRes.ok) {
+          const saved = await saveRes.json();
+          resolvedAddressId = saved.id;
+        }
+      }
+
       const res = await fetch(apiUrl('/api/orders/mock-checkout'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           customerName: name || undefined,
-          shippingAddress,
+          addressId: resolvedAddressId || undefined,
           items: cartItems.map((i) => ({
             product_id: i.product_id,
             size: i.size,
@@ -238,6 +260,7 @@ function AuthPanel({ onNext, onSwitch }) {
       email: profile.email,
       name: profile.name,
       shippingAddress,
+      addressId: selected.type === 'saved' ? selected.id : null,
     });
   }
 

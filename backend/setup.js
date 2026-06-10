@@ -233,6 +233,7 @@ async function setup() {
       created_by INT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at DATETIME DEFAULT NULL,
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
       INDEX idx_active_dates (is_active, start_date, end_date),
       INDEX idx_created_by (created_by)
