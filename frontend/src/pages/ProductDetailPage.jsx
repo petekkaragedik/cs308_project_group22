@@ -821,7 +821,7 @@ export default function ProductDetailPage() {
           {canReview !== null && (
             <div style={styles.reviewForm}>
               <p style={styles.sectionLabel}>
-                {isEditing ? 'Edit Your Comment' : myReview?.rating ? 'Update Your Review' : 'Leave a Review'}
+                {isEditing ? 'Edit Your Comment' : myReview?.comment ? 'Update Your Review' : 'Leave a Review'}
               </p>
 
               {/* Star picker — always available, pre-filled if user already rated */}
@@ -887,7 +887,7 @@ export default function ProductDetailPage() {
                     ? 'SUBMITTING...'
                     : isEditing
                     ? 'UPDATE COMMENT'
-                    : myReview?.rating
+                    : myReview?.comment
                     ? 'UPDATE REVIEW'
                     : 'SUBMIT REVIEW'}
                 </button>

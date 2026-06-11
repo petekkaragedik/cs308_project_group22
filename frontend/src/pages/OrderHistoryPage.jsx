@@ -207,6 +207,7 @@ function OrderSummaryCard({ order, returnStatus, onViewInvoice, onOrderCancelled
       setCancelError('Failed to cancel order. Please try again.');
     } finally {
       setCancelling(false);
+      setConfirmCancel(false);
     }
   }
 
