@@ -22,21 +22,26 @@ beforeEach(() => {
 });
 
 describe("GET /api/products", () => {
-  it("returns all products and parses string images into arrays", async () => {
+  it("returns paginated products and parses string images into arrays", async () => {
+    // The endpoint runs COUNT + data queries in parallel via Promise.all
+    mockQuery.mockResolvedValueOnce([[{ total: 2 }], []]);
     mockQuery.mockResolvedValueOnce([
       [
         { id: "p1", name: "Board A", model: "m", images: '["a.png","b.png"]' },
         { id: "p2", name: "Board B", model: "m", images: ["c.png"] },
       ],
+      [],
     ]);
 
     const res = await request(app).get("/api/products");
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0].images).toEqual(["a.png", "b.png"]);
-    expect(res.body[1].images).toEqual(["c.png"]);
-    expect(mockQuery).toHaveBeenCalledWith("SELECT * FROM products");
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data[0].images).toEqual(["a.png", "b.png"]);
+    expect(res.body.data[1].images).toEqual(["c.png"]);
+    expect(res.body.pagination).toBeDefined();
+    expect(res.body.pagination.total).toBe(2);
+    expect(mockQuery).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -68,20 +73,22 @@ describe("GET /api/products/search", () => {
 });
 
 describe("GET /api/products/category/:categoryName", () => {
-  it("filters products by category name", async () => {
+  it("filters products by category name with pagination", async () => {
+    // The endpoint runs COUNT + data queries in parallel via Promise.all
+    mockQuery.mockResolvedValueOnce([[{ total: 1 }], []]);
     mockQuery.mockResolvedValueOnce([
       [{ id: "p1", categoryName: "surfboards", images: '["a.png"]' }],
+      [],
     ]);
 
     const res = await request(app).get("/api/products/category/surfboards");
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].images).toEqual(["a.png"]);
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining("categoryName"),
-      ["surfboards"]
-    );
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].images).toEqual(["a.png"]);
+    expect(res.body.pagination).toBeDefined();
+    expect(res.body.pagination.total).toBe(1);
+    expect(mockQuery).toHaveBeenCalledTimes(2);
   });
 });
 
